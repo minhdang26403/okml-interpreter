@@ -1,4 +1,4 @@
-open Lib
+open Interpreter
 
 let fileName = ref ""
   
