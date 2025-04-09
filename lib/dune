@@ -1,5 +1,6 @@
 (library
- (name interpreter))
+ (name interpreter)
+ (modules_without_implementation eval opt reader typechecker))
 
 (ocamllex lexer)
 
