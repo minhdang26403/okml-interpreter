@@ -3,12 +3,42 @@
     open Exp
 %}
 
-%token PLUS TIMES
+(* variables *)
+%token <string> IDENT
 
+(* let bindings and functions *)
+%token LET IN FUN ARROW REC
+
+(* integer literals *)
 %token <int>INT
 
-%token LPAREN RPAREN
+(* arithmetic  operators *)
+%token PLUS MINUS TIMES DIV
 
+(* comparison operators *)
+%token EQ NEQ GEQ LEQ GT LT
+
+(* boolean literals and logical operators *)
+%token TRUE FALSE
+%token AND OR NOT
+
+(* conditionals *)
+%token IF THEN ELSE
+
+(* tuple construction *)
+%token LPAREN RPAREN COMMA    (* for (e1, e2) *)
+
+(* list construction *)
+%token CONS                   (* for :: *)
+%token LBRACK RBRACK          (* for [] and [ ] *)
+
+(* pattern maching *)
+%token MATCH WITH BAR
+
+(* unit value *)
+%token UNIT
+
+(* end-of-file *)
 %token EOF
 
 %start <ast>parse
