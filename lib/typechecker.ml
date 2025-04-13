@@ -1,0 +1,47 @@
+(* 
+ * val unify : (Type.ty * Type.ty) list -> (int * Type.ty) list option 
+ *)
+
+ let rec occur x ty = 
+  match ty with 
+  | Var y -> x = y
+  | Fun(t1, t2) -> occur x t1 || occur x t2
+  | Pair(t1, t2) -> occur x t1 || occur x t2
+  | List t -> occur x t 
+  | _ -> false
+
+(* for i.e: x = 1, rt = Int, ty = Var '1 *)
+(* rt: replaced type, usually primitive types already defined in OCaml *)
+let rec substitute x rt ty = 
+  match ty with 
+  | Var y -> If x = y then rt else Var y 
+  | Fun(t1, t2) -> Fun(substitute x rt t1, substitute x rt t2)
+  | Pair(t1,t2) -> Pair(substitute x rt t1, substitute x rt t2)
+  | List t -> List (substitute x rt t)
+  | _ -> ty 
+
+let mapSubstitution x rt lst = 
+  List.map (fun(a,b) -> (substitute x rt a, substitute x rt b)) lst
+
+(* Ref: https://cs3110.github.io/textbook/chapters/interp/inference.html*)
+
+(* For i.e: 
+ * Input: lst = [ (Var 1, Int); (Var 2, Var 1); (Fun(Var 2, Bool), Fun(Int, Var 3)) ]
+ * Output: Some ([ (1, Int); (2, Int); (3, Bool) ])
+ *)
+let rec unify(lst : (Type.ty * Type.ty) list) : (int * Type.ty) list option = 
+  match lst with 
+  | [] -> Some []
+  | (t1,t2) :: xs -> 
+    if t1 = t2 then unify(xs) else 
+      match (t1,t2) with 
+      | (Var x, t) | (t, Var x) -> 
+        if occur x t then None 
+        else 
+          let ys = mapSubstitution x t xs in 
+          (match unify ys with 
+          | None -> None 
+          | Some subst -> Some((x,t) :: subst))
+      | (Fun(a1, b1), Fun(a2,b2)) | (Pair(a1, b1), Pair(a2, b2)) -> unify((a1,a2) :: (b1,b2) :: xs)
+      | (List t1, List t2) -> unify((t1, t2) :: xs)
+      | _ -> None
