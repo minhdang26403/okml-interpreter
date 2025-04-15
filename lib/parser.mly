@@ -1,148 +1,124 @@
 (* parser.mly *)
 %{
-    open Exp
+  open Exp
 %}
 
 
-(* let bindings *)
-%token LET IN
+(* token definitions *)
+%token LET IN                 (* let bindings *)
+%token FUN ARROW REC          (* functions *)
+%token MATCH WITH BAR         (* pattern matching *)
+%token IF THEN ELSE           (* conditional branching *)
+%token TRUE FALSE             (* boolean literals *)
+%token AND OR NOT             (* logical operators *)
+%token PLUS MINUS TIMES DIV   (* arithmetic operators *)
+%token EQ NEQ GEQ LEQ GT LT   (* comparison operators *)
+%token LPAREN RPAREN COMMA    (* tuple construction *)
+%token LBRACK RBRACK CONS     (* list construction *)
+%token <int> INT              (* integers *)
+%token <string> IDENT         (* identifiers *)
+%token EOF                    (* identifiers *)
 
-(* functions *)
-%token FUN ARROW REC
 
-(* pattern matching *)
-%token MATCH WITH BAR
+(* type declarations *)
+%type <ast> expr
+%type <ast -> ast> match_expr
+%type <ast> logic_or
+%type <ast> logic_and
+%type <ast> comparison
+%type <ast> list_cons
+%type <ast> arith_add_sub
+%type <ast> arith_mul_div
+%type <ast> unary
+%type <ast> func_app
+%type <ast> primary
+%type <unit option> option(BAR)
 
-(* conditional branching *)
-%token IF THEN ELSE
 
-(* boolean literals *)
-%token TRUE FALSE
-
-(* logical operators *)
-%token AND OR NOT
-
-(* arithmetic operators *)
-%token PLUS MINUS TIMES DIV
-
-(* comparison operators *)
-%token EQ NEQ GEQ LEQ GT LT
-
-(* tuple construction *)
-%token LPAREN RPAREN COMMA
-
-(* list construction *)
-%token LBRACK RBRACK CONS
-
-(* integers *)
-%token <int> INT
-
-(* identifiers *)
-%token <string> IDENT
-
-(* end-of-file *)
-%token EOF
-
-(* Type declarations *)
-%type <Exp.ast> parse
-%type <Exp.ast> expr
-%type <Exp.ast -> Exp.ast> match_expr
-%type <Exp.ast> logic_or
-%type <Exp.ast> logic_and
-%type <Exp.ast> compare
-%type <Exp.ast> cons
-%type <Exp.ast> arith_add
-%type <Exp.ast> arith_mul
-%type <Exp.ast> unary
-%type <Exp.ast> app
-%type <Exp.ast> atom
-
-%start parse
+(* entry point *)
+%start <ast> parse
 %%
 
 parse:
-  | e=expr; EOF { e }
+  | e=expr EOF { e }
 
 expr:
-  | LET x=IDENT EQ e1=expr IN e2=expr               { BinOp (Let x, e1, e2) }
-  | FUN x=IDENT ARROW e=expr                        { UnOp (Fun x, e) }
-  | LET REC f=IDENT x=IDENT EQ e1=expr IN e2=expr   { BinOp (LetRec (f, x), e1, e2) }
-  | IF c=expr THEN t=expr ELSE f=expr               { TrinOp (Cond, c, t, f) }
-  | MATCH e=expr WITH m=match_expr                  { m e }
-  | e=logic_or                                      { e }
+  (* function abstraction *)
+  | FUN x=IDENT ARROW e=expr { UnOp (Fun x, e) }
 
-logic_or:
-  | a=logic_and OR b=logic_or  { BinOp (Or, a, b) }
-  | a=logic_and                { a }
+  (* let binding *)
+  | LET x=IDENT EQ e1=expr IN e2=expr { BinOp (Let x, e1, e2) }
+  | LET REC f=IDENT x=IDENT EQ e1=expr IN e2=expr { BinOp(LetRec (f, x), e1, e2) }
 
-logic_and:
-  | a=compare AND b=logic_and  { BinOp (And, a, b) }
-  | a=compare                  { a }
+  (* pattern matching *)
+  | MATCH e=expr WITH m=match_expr { m e }
 
-compare:
-  | a=compare EQ b=cons        { BinOp (Eq, a, b) }
-  | a=compare NEQ b=cons       { BinOp (Neq, a, b) }
-  | a=compare GEQ b=cons       { BinOp (Geq, a, b) }
-  | a=compare LEQ b=cons       { BinOp (Leq, a, b) }
-  | a=compare GT b=cons        { BinOp (Gt, a, b) }
-  | a=compare LT b=cons        { BinOp (Lt, a, b) }
-  | a=cons                     { a }
+  (* conditional branching *)
+  | IF e1=expr THEN e2=expr ELSE e3=expr { TrinOp (Cond, e1, e2, e3) }
 
-cons:
-  | hd=arith_add CONS tl=cons  { BinOp (Cons, hd, tl) }
-  | e=arith_add                { e }
-
-arith_add:
-  | a=arith_add PLUS b=arith_mul   { BinOp (Add, a, b) }
-  | a=arith_add MINUS b=arith_mul  { BinOp (Sub, a, b) }
-  | a=arith_mul                    { a }
-
-arith_mul:
-  | a=arith_mul TIMES b=unary      { BinOp (Mul, a, b) }
-  | a=arith_mul DIV b=unary        { BinOp (Div, a, b) }
-  | a=unary                        { a }
-
-unary:
-  | MINUS e=unary     { UnOp (Neg, e) }
-  | NOT e=unary       { UnOp (Not, e) }
-  | e=app             { e }
-
-app:
-  | f=app arg=atom    { BinOp (App, f, arg) }
-  | e=atom            { e }
-
-atom:
-  | n=INT                                { Base (Int n) }
-  | TRUE                                 { Base (Bool true) }
-  | FALSE                                { Base (Bool false) }
-  | x=IDENT                              { Base (Var x) }
-  | UNIT                                 { Base Unit }
-  | LPAREN e1=expr COMMA e2=expr RPAREN { BinOp (Pair, e1, e2) }
-  | LPAREN e=expr RPAREN                { e }
-  | LBRACK RBRACK                       { Base Nil }
+  (* higher-precedence expression *)
+  | e=logic_or { e }
 
 match_expr:
-  | BAR LBRACK; RBRACK; ARROW e1=expr;
-    BAR x=IDENT; CONS; xs=IDENT; ARROW e2=expr
-      { fun e -> TrinOp (MatchL (x, xs), e, e1, e2) }
+  (* pair matching *)
+  | BAR? LPAREN x=IDENT COMMA y=IDENT RPAREN ARROW e2=expr
+      { fun e1 -> BinOp (MatchP (x, y), e1, e2) }
 
-  | BAR x=IDENT; CONS; xs=IDENT; ARROW e2=expr;
-    BAR LBRACK; RBRACK; ARROW e1=expr
-      { fun e -> TrinOp (MatchL (x, xs), e, e1, e2) }
+  (* list matching (two possible orders) *)
+  | BAR? LBRACK RBRACK ARROW e2=expr     (* empty list case first *)
+    BAR x=IDENT CONS xs=IDENT ARROW e3=expr
+      { fun e1 -> TrinOp (MatchL (x, xs), e1, e2, e3) }
 
-  | BAR LPAREN; x=IDENT; COMMA; y=IDENT; RPAREN; ARROW e=expr
-      { fun e0 -> BinOp (MatchP (x, y), e0, e) }
+  | BAR? x=IDENT CONS xs=IDENT ARROW e3=expr
+    BAR LBRACK RBRACK ARROW e2=expr      (* empty list case second *)
+      { fun e1 -> TrinOp (MatchL (x, xs), e1, e2, e3) }
 
+logic_or:
+  | e1=logic_and OR e2=logic_or       { BinOp (Or, e1, e2) }
+  | e=logic_and                       { e }
 
+logic_and:
+  | e1=comparison AND e2=logic_and    { BinOp (And, e1, e2) }
+  | e=comparison                      { e }
 
-(* Patterns to visit later *)
-(*
-let expN :=
-| MATCH; e1=expN; WITH; LPAREN; x=IDENT; COMMA; y=IDENT; RPAREN; ARROW; e2=expN { ... }
+comparison:
+  | e1=comparison EQ e2=list_cons     { BinOp (Eq, e1, e2) }
+  | e1=comparison NEQ e2=list_cons    { BinOp (Neq, e1, e2) }
+  | e1=comparison GEQ e2=list_cons    { BinOp (Geq, e1, e2) }
+  | e1=comparison LEQ e2=list_cons    { BinOp (Leq, e1, e2) }
+  | e1=comparison GT e2=list_cons     { BinOp (Gt, e1, e2) }
+  | e1=comparison LT e2=list_cons     { BinOp (Lt, e1, e2) }
+  | e=list_cons                       { e }
 
-| MATCH; e1=expN; WITH;
-    BAR?; LBRACK; RBRACK; ARROW; e2=expN;
-    BAR?; x=IDENT; CONS; xs=IDENT; ARROW; e3=expN { ... }
+list_cons:
+  | e1=arith_add_sub CONS e2=list_cons    { BinOp (Cons, e1, e2) }
+  | e=arith_add_sub                       { e }
 
-*)
+arith_add_sub:
+  | e1=arith_add_sub PLUS e2=arith_mul_div    { BinOp (Add, e1, e2) }
+  | e1=arith_add_sub MINUS e2=arith_mul_div   { BinOp (Sub, e1, e2) }
+  | e=arith_mul_div                           { e }
 
+arith_mul_div:
+  | e1=arith_mul_div TIMES e2=unary   { BinOp (Mul, e1, e2) }
+  | e1=arith_mul_div DIV e2=unary     { BinOp (Div, e1, e2) }
+  | e=unary                           { e }
+
+unary:
+  | MINUS e=unary   { UnOp (Neg, e) }
+  | NOT e=unary     { UnOp (Not, e) }
+  | e=func_app      { e }
+
+func_app:
+  | e1=func_app e2=primary    { BinOp (App, e1, e2) }
+  | e=primary                 { e }
+
+primary:
+  | x=IDENT                             { Base (Var x) }
+  | n=INT                               { Base (Int n) }
+  | TRUE                                { Base (Bool true) }
+  | FALSE                               { Base (Bool false) }
+  | LPAREN RPAREN                       { Base Unit }
+  | LBRACK RBRACK                       { Base Nil }
+  | LPAREN e=expr RPAREN                { e }
+  | LPAREN e1=expr COMMA e2=expr RPAREN { BinOp (Pair, e1, e2) }
