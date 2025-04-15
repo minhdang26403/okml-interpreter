@@ -61,17 +61,18 @@ parse:
 
 expr:
   | LET x=IDENT EQ e1=expr IN e2=expr               { BinOp (Let x, e1, e2) }
+  | FUN x=IDENT ARROW e=expr                        { UnOp (Fun x, e) }
   | LET REC f=IDENT x=IDENT EQ e1=expr IN e2=expr   { BinOp (LetRec (f, x), e1, e2) }
   | IF c=expr THEN t=expr ELSE f=expr               { TrinOp (Cond, c, t, f) }
   | MATCH e=expr WITH m=match_expr                  { m e }
   | e=logic_or                                      { e }
 
 logic_or:
-  | a=logic_or OR b=logic_and  { BinOp (Or, a, b) }
+  | a=logic_and OR b=logic_or  { BinOp (Or, a, b) }
   | a=logic_and                { a }
 
 logic_and:
-  | a=logic_and AND b=compare  { BinOp (And, a, b) }
+  | a=compare AND b=logic_and  { BinOp (And, a, b) }
   | a=compare                  { a }
 
 compare:
@@ -107,7 +108,6 @@ app:
   | e=atom            { e }
 
 atom:
-  | FUN x=IDENT ARROW e=expr             { UnOp (Fun x, e) }
   | n=INT                                { Base (Int n) }
   | TRUE                                 { Base (Bool true) }
   | FALSE                                { Base (Bool false) }
