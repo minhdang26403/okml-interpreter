@@ -3,14 +3,24 @@
     open Exp
 %}
 
-(* variables *)
-%token IDENT
 
-(* let bindings and functions *)
-%token LET IN FUN ARROW REC
+(* let bindings *)
+%token LET IN
 
-(* integer literals *)
-%token INT
+(* functions *)
+%token FUN ARROW REC
+
+(* pattern matching *)
+%token MATCH WITH BAR
+
+(* conditional branching *)
+%token IF THEN ELSE
+
+(* boolean literals *)
+%token TRUE FALSE
+
+(* logical operators *)
+%token AND OR NOT
 
 (* arithmetic operators *)
 %token PLUS MINUS TIMES DIV
@@ -18,23 +28,17 @@
 (* comparison operators *)
 %token EQ NEQ GEQ LEQ GT LT
 
-(* boolean literals and logical operators *)
-%token TRUE FALSE %token AND OR NOT
-
-(* conditionals *)
-%token IF THEN ELSE
-
 (* tuple construction *)
 %token LPAREN RPAREN COMMA
 
 (* list construction *)
-%token CONS %token LBRACK RBRACK
+%token LBRACK RBRACK CONS
 
-(* pattern matching *)
-%token MATCH WITH BAR
+(* integers *)
+%token <int> INT
 
-(* unit value *)
-%token UNIT
+(* identifiers *)
+%token <string> IDENT
 
 (* end-of-file *)
 %token EOF
@@ -128,3 +132,17 @@ match_expr:
 
   | BAR LPAREN; x=IDENT; COMMA; y=IDENT; RPAREN; ARROW e=expr
       { fun e0 -> BinOp (MatchP (x, y), e0, e) }
+
+
+
+(* Patterns to visit later *)
+(*
+let expN :=
+| MATCH; e1=expN; WITH; LPAREN; x=IDENT; COMMA; y=IDENT; RPAREN; ARROW; e2=expN { ... }
+
+| MATCH; e1=expN; WITH;
+    BAR?; LBRACK; RBRACK; ARROW; e2=expN;
+    BAR?; x=IDENT; CONS; xs=IDENT; ARROW; e3=expN { ... }
+
+*)
+
