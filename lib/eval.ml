@@ -20,8 +20,8 @@ let rec is_value (e : ast) : bool =
 
 let step_unOp op e =
   match (op, e) with
-  | Not, Bool b -> Bool (not b)
-  | Neg, Int x -> Int (-x)
+  | Not, Base (Bool b) -> Bool (not b)
+  | Neg, Base (Int x) -> Int (-x)
   | _ -> failwith "Not implemented"
 
 let is_fun e =
@@ -100,60 +100,30 @@ let step_binOp op e1 e2 =
         | Gt -> Bool (gt_ast e1 e2)
         | Lt -> Bool (lt_ast e1 e2)
         | _ -> failwith "Unreachable")
+  (* logical operations *)
+  | And, Base (Bool b1), Base (Bool b2) -> Bool (b1 && b2)
+  | Or, Base (Bool b1), Base (Bool b2) -> Bool (b1 || b2)
+  (* should be unreachable *)
   | _ -> failwith "Operator and operand type mismatch"
 
-let rec step (e : ast) : ast option =
+let rec step_helper (e : ast) : ast =
   match e with
-  | Base (Var _) | Base (Int _) | Base (Bool _) | Base Unit | Base Nil -> None
-  (* logical negation *)
-  | UnOp (Not, e) -> (
-      match step e with
-      (* e is already a value *)
-      | None -> (
-          match e with
-          | Base (Bool b) -> Some (Base (Bool (not b)))
-          | _ -> failwith "Operator and operand type mismatch")
-      (* e is not a value yet *)
-      | Some e' -> Some (UnOp (Not, e')))
-  (* numerical negation *)
-  | UnOp (Neg, e) -> (
-      match step e with
-      (* e is already a value *)
-      | None -> (
-          match e with
-          | Base (Int x) -> Some (Base (Int (-x)))
-          | _ -> failwith "Operator and operand type mismatch")
-      (* e is not a value yet *)
-      | Some e' -> Some (UnOp (Neg, e')))
+  | Base (Var _) | Base (Int _) | Base (Bool _) | Base Unit | Base Nil ->
+      failwith "Does not step"
   (* functions are values *)
-  | UnOp (Fun _, _) | UnOp (RecFun (_, _), _) -> None
-  (* logical operators are short-circuited *)
-  | BinOp (And, e1, e2) -> (
-      match step e1 with
-      | Some e1' -> Some (BinOp (And, e1', e2))
-      | None -> (
-          match step e2 with
-          | Some e2' -> Some (BinOp (And, e1, e2'))
-          | None -> Some (Base (step_binOp And e1 e2))))
-  | BinOp (Or, e1, e2) -> (
-      match step e1 with
-      | Some e1' -> Some (BinOp (Or, e1', e2))
-      | None -> (
-          match step e2 with
-          | Some e2' -> Some (BinOp (Or, e1, e2'))
-          | None -> Some (Base (step_binOp Or e1 e2))))
-  (* other binary operations are evaluated right-to-left *)
+  | UnOp (Fun _, _) | UnOp (RecFun (_, _), _) -> failwith "Does not step"
+  (* logical negation and numerical negation *)
+  | UnOp (op, e) ->
+      if is_value e then Base (step_unOp op e) else UnOp (op, step_helper e)
   | BinOp (op, e1, e2) ->
-      if not (is_value e2) then
-        match step e2 with
-        | Some e2' -> Some (BinOp (op, e1, e2'))
-        | None -> None
-      else if not (is_value e1) then
-        match step e1 with
-        | Some e1' -> Some (BinOp (op, e1', e2))
-        | None -> None
-      else Some (Base (step_binOp op e1 e2))
+      (* always evaluate left-to-right *)
+      if is_value e1 && is_value e2 then Base (step_binOp op e1 e2)
+      else if is_value e1 then BinOp (op, e1, step_helper e2)
+      else BinOp (op, e1, step_helper e2)
   | _ -> failwith "Not implemented"
+
+let rec step (e : ast) : ast option =
+  if is_value e then None else Some (step_helper e)
 
 let rec eval (e : ast) : ast =
   match step e with None -> e | Some e' -> eval e'
