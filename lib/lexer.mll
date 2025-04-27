@@ -1,4 +1,6 @@
 (* lexer.mll *)
+(* Author: Dang Truong *)
+
 {
     open Parser
 }
