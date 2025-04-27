@@ -106,6 +106,39 @@ let step_binOp op e1 e2 =
   (* should be unreachable *)
   | _ -> failwith "Operator and operand type mismatch"
 
+(*
+ * Replace all free occurrences of variable x in expression e with value v.
+ * Avoid variable capture by respecting scoping (e.g., skip substitution when x is shadowed)
+ *)
+let rec subst (e : ast) (x : string) (v : ast) : ast =
+  match e with
+  | Base (Var y) -> if x = y then v else e
+  | Base _ -> e
+  | UnOp (Fun y, body) -> if x = y then e else UnOp (Fun y, subst body x v)
+  | UnOp (RecFun (f, y), body) ->
+      if x = f || x = y then e else UnOp (RecFun (f, y), subst body x v)
+  | UnOp (op, e1) -> UnOp (op, subst e1 x v)
+  | BinOp (Let y, e1, e2) ->
+      let e1' = subst e1 x v in
+      let e2' = if x = y then e2 else subst e2 x v in
+      BinOp (Let y, e1', e2')
+  | BinOp (LetRec (f, y), e1, e2) ->
+      let e1' = if x = f || x = y then e1 else subst e1 x v in
+      let e2' = if x = f then e2 else subst e2 x v in
+      BinOp (LetRec (f, y), e1', e2')
+  | BinOp (MatchP (a, b), e1, e2) ->
+      let e1' = subst e1 x v in
+      let e2' = if x = a || x = b then e2 else subst e2 x v in
+      BinOp (MatchP (a, b), e1', e2')
+  | BinOp (op, e1, e2) -> BinOp (op, subst e1 x v, subst e2 x v)
+  | TrinOp (MatchL (a, b), e1, e2, e3) ->
+      let e1' = subst e1 x v in
+      let e2' = subst e2 x v in
+      let e3' = if x = a || x = b then e3 else subst e3 x v in
+      TrinOp (MatchL (a, b), e1', e2', e3')
+  | TrinOp (Cond, e1, e2, e3) ->
+      TrinOp (Cond, subst e1 x v, subst e2 x v, subst e3 x v)
+
 let rec step_helper (e : ast) : ast =
   match e with
   | Base (Var _) | Base (Int _) | Base (Bool _) | Base Unit | Base Nil ->
@@ -115,6 +148,9 @@ let rec step_helper (e : ast) : ast =
   (* logical negation and numerical negation *)
   | UnOp (op, e) ->
       if is_value e then Base (step_unOp op e) else UnOp (op, step_helper e)
+  | BinOp (Let x, e1, e2) ->
+      if is_value e1 then subst e2 x e1 else BinOp (Let x, step_helper e1, e2)
+  (* arithmetic operations, comparisons, and logical operations *)
   | BinOp (op, e1, e2) ->
       (* always evaluate left-to-right *)
       if is_value e1 && is_value e2 then Base (step_binOp op e1 e2)
