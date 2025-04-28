@@ -36,8 +36,10 @@ let rec eq_ast e1 e2 =
   | Base (Bool b1), Base (Bool b2) -> b1 = b2
   | Base Unit, Base Unit -> true
   | Base Nil, Base Nil -> true
-  | BinOp (Pair, a1, b1), BinOp (Pair, a2, b2) -> eq_ast a1 a2 && eq_ast b1 b2
-  | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) -> eq_ast h1 h2 && eq_ast t1 t2
+  | BinOp (Pair, a1, b1), BinOp (Pair, a2, b2) ->
+      eq_ast a1 a2 && eq_ast b1 b2
+  | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
+      eq_ast h1 h2 && eq_ast t1 t2
   | _ -> failwith "eq_ast: cannot compare these values"
 
 let rec gt_ast e1 e2 =
@@ -107,37 +109,40 @@ let step_binOp op e1 e2 =
   | _ -> failwith "Operator and operand type mismatch"
 
 (*
- * Replace all free occurrences of variable x in expression e with value v.
- * Avoid variable capture by respecting scoping (e.g., skip substitution when x is shadowed)
+ * subst : ast -> ast -> string -> ast
+ * REQUIRES: [v] is a value
+ * ENSURES: [subst e v x] replaces all free occurrences of variable [x] in
+ * expression [e] with value [v]. This function avoids variable capture by
+ * respecting scoping (e.g., skip substitution when [x] is shadowed)
  *)
-let rec subst (e : ast) (x : string) (v : ast) : ast =
+let rec subst (e : ast) (v : ast) (x : string) : ast =
   match e with
   | Base (Var y) -> if x = y then v else e
   | Base _ -> e
-  | UnOp (Fun y, body) -> if x = y then e else UnOp (Fun y, subst body x v)
+  | UnOp (Fun y, body) -> if x = y then e else UnOp (Fun y, subst body v x)
   | UnOp (RecFun (f, y), body) ->
-      if x = f || x = y then e else UnOp (RecFun (f, y), subst body x v)
-  | UnOp (op, e1) -> UnOp (op, subst e1 x v)
+      if x = f || x = y then e else UnOp (RecFun (f, y), subst body v x)
+  | UnOp (op, e1) -> UnOp (op, subst e1 v x)
   | BinOp (Let y, e1, e2) ->
-      let e1' = subst e1 x v in
-      let e2' = if x = y then e2 else subst e2 x v in
+      let e1' = subst e1 v x in
+      let e2' = if x = y then e2 else subst e2 v x in
       BinOp (Let y, e1', e2')
   | BinOp (LetRec (f, y), e1, e2) ->
-      let e1' = if x = f || x = y then e1 else subst e1 x v in
-      let e2' = if x = f then e2 else subst e2 x v in
+      let e1' = if x = f || x = y then e1 else subst e1 v x in
+      let e2' = if x = f then e2 else subst e2 v x in
       BinOp (LetRec (f, y), e1', e2')
   | BinOp (MatchP (a, b), e1, e2) ->
-      let e1' = subst e1 x v in
-      let e2' = if x = a || x = b then e2 else subst e2 x v in
+      let e1' = subst e1 v x in
+      let e2' = if x = a || x = b then e2 else subst e2 v x in
       BinOp (MatchP (a, b), e1', e2')
-  | BinOp (op, e1, e2) -> BinOp (op, subst e1 x v, subst e2 x v)
-  | TrinOp (MatchL (a, b), e1, e2, e3) ->
-      let e1' = subst e1 x v in
-      let e2' = subst e2 x v in
-      let e3' = if x = a || x = b then e3 else subst e3 x v in
-      TrinOp (MatchL (a, b), e1', e2', e3')
+  | BinOp (op, e1, e2) -> BinOp (op, subst e1 v x, subst e2 v x)
+  | TrinOp (MatchL (hd, tl), e1, e2, e3) ->
+      let e1' = subst e1 v x in
+      let e2' = subst e2 v x in
+      let e3' = if x = hd || x = tl then e3 else subst e3 v x in
+      TrinOp (MatchL (hd, tl), e1', e2', e3')
   | TrinOp (Cond, e1, e2, e3) ->
-      TrinOp (Cond, subst e1 x v, subst e2 x v, subst e3 x v)
+      TrinOp (Cond, subst e1 v x, subst e2 v x, subst e3 v x)
 
 let rec step_helper (e : ast) : ast =
   match e with
@@ -148,14 +153,15 @@ let rec step_helper (e : ast) : ast =
   (* logical negation and numerical negation *)
   | UnOp (op, e) ->
       if is_value e then Base (step_unOp op e) else UnOp (op, step_helper e)
+  (* let bindings *)
   | BinOp (Let x, e1, e2) ->
-      if is_value e1 then subst e2 x e1 else BinOp (Let x, step_helper e1, e2)
+      if is_value e1 then subst e2 e1 x else BinOp (Let x, step_helper e1, e2)
   (* arithmetic operations, comparisons, and logical operations *)
   | BinOp (op, e1, e2) ->
       (* always evaluate left-to-right *)
       if is_value e1 && is_value e2 then Base (step_binOp op e1 e2)
       else if is_value e1 then BinOp (op, e1, step_helper e2)
-      else BinOp (op, e1, step_helper e2)
+      else BinOp (op, step_helper e1, e2)
   | _ -> failwith "Not implemented"
 
 let rec step (e : ast) : ast option =
