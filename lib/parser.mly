@@ -1,4 +1,6 @@
 (* parser.mly *)
+(* Author: Dang Truong *)
+
 %{
   open Exp
 %}
@@ -17,7 +19,7 @@
 %token LBRACK RBRACK CONS     (* list construction *)
 %token <int> INT              (* integers *)
 %token <string> IDENT         (* identifiers *)
-%token EOF                    (* identifiers *)
+%token EOF                    (* end-of-file *)
 
 
 (* type declarations *)
@@ -40,6 +42,7 @@
 %%
 
 parse:
+  (* there is no top level in OKml; a program is just one contiguous expression *)
   | e=expr EOF { e }
 
 expr:
@@ -74,14 +77,17 @@ match_expr:
       { fun e1 -> TrinOp (MatchL (x, xs), e1, e2, e3) }
 
 logic_or:
+  (* logical or, right associative *)
   | e1=logic_and OR e2=logic_or       { BinOp (Or, e1, e2) }
   | e=logic_and                       { e }
 
 logic_and:
+  (* logical and, right associative *)
   | e1=comparison AND e2=logic_and    { BinOp (And, e1, e2) }
   | e=comparison                      { e }
 
 comparison:
+  (* comparisons, left associative *)
   | e1=comparison EQ e2=list_cons     { BinOp (Eq, e1, e2) }
   | e1=comparison NEQ e2=list_cons    { BinOp (Neq, e1, e2) }
   | e1=comparison GEQ e2=list_cons    { BinOp (Geq, e1, e2) }
@@ -91,29 +97,35 @@ comparison:
   | e=list_cons                       { e }
 
 list_cons:
+  (* list cons, right associative *)
   | e1=arith_add_sub CONS e2=list_cons    { BinOp (Cons, e1, e2) }
   | e=arith_add_sub                       { e }
 
 arith_add_sub:
+  (* addition and subtraction, left associative *)
   | e1=arith_add_sub PLUS e2=arith_mul_div    { BinOp (Add, e1, e2) }
   | e1=arith_add_sub MINUS e2=arith_mul_div   { BinOp (Sub, e1, e2) }
   | e=arith_mul_div                           { e }
 
 arith_mul_div:
+  (* multiplication and division, left associative *)
   | e1=arith_mul_div TIMES e2=unary   { BinOp (Mul, e1, e2) }
   | e1=arith_mul_div DIV e2=unary     { BinOp (Div, e1, e2) }
   | e=unary                           { e }
 
 unary:
+  (* numerical negation and logical negation *)
   | MINUS e=unary   { UnOp (Neg, e) }
   | NOT e=unary     { UnOp (Not, e) }
   | e=func_app      { e }
 
 func_app:
+  (* function application, left associative *)
   | e1=func_app e2=primary    { BinOp (App, e1, e2) }
   | e=primary                 { e }
 
 primary:
+  (* primary expressions *)
   | x=IDENT                             { Base (Var x) }
   | n=INT                               { Base (Int n) }
   | TRUE                                { Base (Bool true) }
