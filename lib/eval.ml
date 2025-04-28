@@ -22,7 +22,8 @@ let step_unOp op e =
   match (op, e) with
   | Not, Base (Bool b) -> Bool (not b)
   | Neg, Base (Int x) -> Int (-x)
-  | _ -> failwith "Not implemented"
+  (* Should be unreachable given the typechecker implementation is correct *)
+  | _ -> failwith "Unreachable"
 
 let is_fun e =
   match e with
@@ -74,40 +75,6 @@ let rec lt_ast e1 e2 =
       else false
   | _ -> failwith "lt_ast: cannot compare these values"
 
-let step_binOp op e1 e2 =
-  match (op, e1, e2) with
-  (* arithmetic operations *)
-  | Add, Base (Int a), Base (Int b) -> Int (a + b)
-  | Sub, Base (Int a), Base (Int b) -> Int (a - b)
-  | Mul, Base (Int a), Base (Int b) -> Int (a * b)
-  | Div, Base (Int _), Base (Int 0) -> raise Division_by_zero
-  | Div, Base (Int a), Base (Int b) -> Int (a / b)
-  (* comparisons *)
-  | Eq, e1, e2
-  | Neq, e1, e2
-  | Geq, e1, e2
-  | Leq, e1, e2
-  | Gt, e1, e2
-  | Lt, e1, e2 -> (
-      if is_fun e1 || is_fun e2 then
-        (* TODO: we may not need to check both since the typechecker
-         * should ensure both operands to be of the same type *)
-        raise (Invalid_argument "compare: functional value")
-      else
-        match op with
-        | Eq -> Bool (eq_ast e1 e2)
-        | Neq -> Bool (not (eq_ast e1 e2))
-        | Geq -> Bool (not (lt_ast e1 e2))
-        | Leq -> Bool (not (gt_ast e1 e2))
-        | Gt -> Bool (gt_ast e1 e2)
-        | Lt -> Bool (lt_ast e1 e2)
-        | _ -> failwith "Unreachable")
-  (* logical operations *)
-  | And, Base (Bool b1), Base (Bool b2) -> Bool (b1 && b2)
-  | Or, Base (Bool b1), Base (Bool b2) -> Bool (b1 || b2)
-  (* should be unreachable *)
-  | _ -> failwith "Operator and operand type mismatch"
-
 (*
  * subst : ast -> ast -> string -> ast
  * REQUIRES: [v] is a value
@@ -144,25 +111,108 @@ let rec subst (e : ast) (v : ast) (x : string) : ast =
   | TrinOp (Cond, e1, e2, e3) ->
       TrinOp (Cond, subst e1 v x, subst e2 v x, subst e3 v x)
 
+let step_binOp op e1 e2 =
+  match (op, e1, e2) with
+  (* arithmetic operations *)
+  | Add, Base (Int a), Base (Int b) -> Base (Int (a + b))
+  | Sub, Base (Int a), Base (Int b) -> Base (Int (a - b))
+  | Mul, Base (Int a), Base (Int b) -> Base (Int (a * b))
+  | Div, Base (Int _), Base (Int 0) -> raise Division_by_zero
+  | Div, Base (Int a), Base (Int b) -> Base (Int (a / b))
+  (* comparisons *)
+  | Eq, e1, e2
+  | Neq, e1, e2
+  | Geq, e1, e2
+  | Leq, e1, e2
+  | Gt, e1, e2
+  | Lt, e1, e2 -> (
+      if is_fun e1 || is_fun e2 then
+        (* TODO: we may not need to check both since the typechecker
+         * should ensure both operands to be of the same type *)
+        raise (Invalid_argument "compare: functional value")
+      else
+        match op with
+        | Eq -> Base (Bool (eq_ast e1 e2))
+        | Neq -> Base (Bool (not (eq_ast e1 e2)))
+        | Geq -> Base (Bool (not (lt_ast e1 e2)))
+        | Leq -> Base (Bool (not (gt_ast e1 e2)))
+        | Gt -> Base (Bool (gt_ast e1 e2))
+        | Lt -> Base (Bool (lt_ast e1 e2))
+        | _ -> failwith "Unreachable")
+  (* logical operations *)
+  | And, Base (Bool b1), Base (Bool b2) -> Base (Bool (b1 && b2))
+  | Or, Base (Bool b1), Base (Bool b2) -> Base (Bool (b1 || b2))
+  (* function application *)
+  | App, UnOp (Fun x, e), v -> subst e v x
+  | App, UnOp (RecFun (_, x), e), v -> subst e v x
+  (* should be unreachable *)
+  | _ -> failwith "Operator and operand type mismatch"
+
+let fst (e : ast) : ast =
+  match e with BinOp (Pair, v, _) -> v | _ -> failwith "Not a pair"
+
+let snd (e : ast) : ast =
+  match e with BinOp (Pair, _, v) -> v | _ -> failwith "Not a pair"
+
 let rec step_helper (e : ast) : ast =
   match e with
-  | Base (Var _) | Base (Int _) | Base (Bool _) | Base Unit | Base Nil ->
-      failwith "Does not step"
-  (* functions are values *)
-  | UnOp (Fun _, _) | UnOp (RecFun (_, _), _) -> failwith "Does not step"
+  (* cannot step primitive expressions and functions *)
+  | Base (Var _)
+  | Base (Int _)
+  | Base (Bool _)
+  | Base Unit
+  | Base Nil
+  | UnOp (Fun _, _)
+  | UnOp (RecFun (_, _), _) ->
+      failwith "Unreachable"
   (* logical negation and numerical negation *)
   | UnOp (op, e) ->
       if is_value e then Base (step_unOp op e) else UnOp (op, step_helper e)
-  (* let bindings *)
+  (* list cons *)
+  | BinOp (Cons, e1, e2) ->
+      if is_value e1 && is_value e2 then failwith "Already a value"
+      else if is_value e1 then BinOp (Cons, step_helper e1, e2)
+      else BinOp (Cons, e1, step_helper e2)
+  (* 2-tupling *)
+  | BinOp (Pair, e1, e2) ->
+      if is_value e1 && is_value e2 then failwith "Already a value"
+      else if is_value e1 then BinOp (Pair, e1, step_helper e2)
+      else BinOp (Pair, step_helper e1, e2)
+  (* pair matching *)
+  | BinOp (MatchP (x, y), e1, e2) ->
+      if is_value e1 then
+        let e2' = subst e2 (fst e1) x in
+        subst e2' (snd e1) y
+      else BinOp (MatchP (x, y), step_helper e1, e2)
+  (* let binding *)
   | BinOp (Let x, e1, e2) ->
       if is_value e1 then subst e2 e1 x else BinOp (Let x, step_helper e1, e2)
-  (* arithmetic operations, comparisons, and logical operations *)
+  (* recursive let binding *)
+  | BinOp (LetRec (f, x), e1, e2) ->
+      if is_value e1 then subst e2 e1 x
+      else BinOp (LetRec (f, x), step_helper e1, e2)
+  (* logical operations *)
+  | BinOp (And, e1, e2) -> step_and e1 e2
+  | BinOp (Or, e1, e2) -> step_or e1 e2
+  (* arithmetic operations and comparisons *)
   | BinOp (op, e1, e2) ->
       (* always evaluate left-to-right *)
-      if is_value e1 && is_value e2 then Base (step_binOp op e1 e2)
+      if is_value e1 && is_value e2 then step_binOp op e1 e2
       else if is_value e1 then BinOp (op, e1, step_helper e2)
       else BinOp (op, step_helper e1, e2)
   | _ -> failwith "Not implemented"
+
+and step_and (e1 : ast) (e2 : ast) : ast =
+  match e1 with
+  | Base (Bool false) -> Base (Bool false)
+  | Base (Bool true) -> BinOp (And, e1, step_helper e2)
+  | _ -> failwith "Unreachable"
+
+and step_or (e1 : ast) (e2 : ast) : ast =
+  match e1 with
+  | Base (Bool true) -> Base (Bool true)
+  | Base (Bool false) -> BinOp (Or, e1, step_helper e2)
+  | _ -> failwith "Unreachable"
 
 let rec step (e : ast) : ast option =
   if is_value e then None else Some (step_helper e)
