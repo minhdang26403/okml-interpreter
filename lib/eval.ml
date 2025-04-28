@@ -18,13 +18,13 @@ let rec is_value (e : ast) : bool =
   | BinOp (Cons, e1, e2) -> is_value e1 && is_value e2
   | _ -> false
 
-let is_fun e =
+let is_fun (e : ast) : bool =
   match e with
   | UnOp (Fun _, _) -> true
   | UnOp (RecFun (_, _), _) -> true
   | _ -> false
 
-let rec eq_ast e1 e2 =
+let rec eq_ast (e1 : ast) (e2 : ast) : bool =
   match (e1, e2) with
   | Base (Int a1), Base (Int a2) -> a1 = a2
   | Base (Bool b1), Base (Bool b2) -> b1 = b2
@@ -36,7 +36,7 @@ let rec eq_ast e1 e2 =
       eq_ast h1 h2 && eq_ast t1 t2
   | _ -> failwith "eq_ast: cannot compare these values"
 
-let rec gt_ast e1 e2 =
+let rec gt_ast (e1 : ast) (e2 : ast) : bool =
   match (e1, e2) with
   | Base (Int a1), Base (Int a2) -> a1 > a2
   | Base (Bool b1), Base (Bool b2) -> b1 > b2
@@ -52,7 +52,7 @@ let rec gt_ast e1 e2 =
       else false
   | _ -> failwith "gt_ast: cannot compare these values"
 
-let rec lt_ast e1 e2 =
+let rec lt_ast (e1 : ast) (e2 : ast) : bool =
   match (e1, e2) with
   | Base (Int a1), Base (Int a2) -> a1 < a2
   | Base (Bool b1), Base (Bool b2) -> b1 < b2
@@ -104,7 +104,7 @@ let rec subst (e : ast) (v : ast) (x : string) : ast =
   | TrinOp (Cond, e1, e2, e3) ->
       TrinOp (Cond, subst e1 v x, subst e2 v x, subst e3 v x)
 
-let step_binOp op e1 e2 =
+let step_binOp (op : binOp) (e1 : ast) (e2 : ast) : ast =
   match (op, e1, e2) with
   (* arithmetic operations *)
   | Add, Base (Int a), Base (Int b) -> Base (Int (a + b))
@@ -138,12 +138,6 @@ let step_binOp op e1 e2 =
   (* should be unreachable *)
   | _ -> failwith "Operator and operand type mismatch"
 
-let fst (e : ast) : ast =
-  match e with BinOp (Pair, v, _) -> v | _ -> failwith "Not a pair"
-
-let snd (e : ast) : ast =
-  match e with BinOp (Pair, _, v) -> v | _ -> failwith "Not a pair"
-
 let rec step_helper (e : ast) : ast =
   match e with
   (* cannot step primitive expressions and functions *)
@@ -160,25 +154,10 @@ let rec step_helper (e : ast) : ast =
   | BinOp (Or, e1, e2) -> step_or e1 e2
   | BinOp (Cons, e1, e2) -> step_list_cons e1 e2
   | BinOp (Pair, e1, e2) -> step_pair e1 e2
-  (* pair matching *)
-  | BinOp (MatchP (x, y), e1, e2) ->
-      if is_value e1 then
-        let e2' = subst e2 (fst e1) x in
-        subst e2' (snd e1) y
-      else BinOp (MatchP (x, y), step_helper e1, e2)
-  (* let binding *)
-  | BinOp (Let x, e1, e2) ->
-      if is_value e1 then subst e2 e1 x else BinOp (Let x, step_helper e1, e2)
-  (* recursive let binding *)
-  | BinOp (LetRec (f, x), e1, e2) ->
-      if is_value e1 then subst e2 e1 x
-      else BinOp (LetRec (f, x), step_helper e1, e2)
-  (* arithmetic operations and comparisons *)
-  | BinOp (op, e1, e2) ->
-      (* always evaluate left-to-right *)
-      if is_value e1 && is_value e2 then step_binOp op e1 e2
-      else if is_value e1 then BinOp (op, e1, step_helper e2)
-      else BinOp (op, step_helper e1, e2)
+  | BinOp (MatchP (x, y), e1, e2) -> step_pair_matching (MatchP (x, y)) e1 e2
+  | BinOp (Let x, e1, e2) -> step_let_binding (Let x) e1 e2
+  | BinOp (LetRec (f, x), e1, e2) -> step_let_binding (LetRec (f, x)) e1 e2
+  | BinOp (op, e1, e2) -> step_other op e1 e2
   | TrinOp (Cond, e1, e2, e3) -> step_conditional_branching e1 e2 e3
   | TrinOp (op, e1, e2, e3) -> step_list_matching op e1 e2 e3
 
@@ -211,6 +190,28 @@ and step_pair (e1 : ast) (e2 : ast) : ast =
   if is_value e1 && is_value e2 then failwith "Already a value"
   else if is_value e2 then BinOp (Pair, step_helper e1, e2)
   else BinOp (Pair, e1, step_helper e2)
+
+and step_pair_matching (op : binOp) (e1 : ast) (e2 : ast) : ast =
+  if is_value e1 then
+    match (op, e1) with
+    | MatchP (x, y), BinOp (Pair, v1, v2) ->
+        let e2' = subst e2 v1 x in
+        subst e2' v2 y
+    | _ -> failwith "Unreachable"
+  else BinOp (op, step_helper e1, e2)
+
+and step_let_binding (op : binOp) (e1 : ast) (e2 : ast) : ast =
+  if is_value e1 then
+    match op with
+    | Let x | LetRec (_, x) -> subst e2 e1 x
+    | _ -> failwith "Unreachable"
+  else BinOp (op, step_helper e1, e2)
+
+and step_other (op : binOp) (e1 : ast) (e2 : ast) : ast =
+  (* always evaluate right-to-left *)
+  if is_value e1 && is_value e2 then step_binOp op e1 e2
+  else if is_value e2 then BinOp (op, step_helper e1, e2)
+  else BinOp (op, e1, step_helper e2)
 
 and step_list_matching (op : trinOp) (e1 : ast) (e2 : ast) (e3 : ast) : ast =
   if is_value e1 then
