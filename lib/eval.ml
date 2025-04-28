@@ -18,13 +18,6 @@ let rec is_value (e : ast) : bool =
   | BinOp (Cons, e1, e2) -> is_value e1 && is_value e2
   | _ -> false
 
-let step_unOp op e =
-  match (op, e) with
-  | Not, Base (Bool b) -> Bool (not b)
-  | Neg, Base (Int x) -> Int (-x)
-  (* Should be unreachable given the typechecker implementation is correct *)
-  | _ -> failwith "Unreachable"
-
 let is_fun e =
   match e with
   | UnOp (Fun _, _) -> true
@@ -139,9 +132,6 @@ let step_binOp op e1 e2 =
         | Gt -> Base (Bool (gt_ast e1 e2))
         | Lt -> Base (Bool (lt_ast e1 e2))
         | _ -> failwith "Unreachable")
-  (* logical operations *)
-  | And, Base (Bool b1), Base (Bool b2) -> Base (Bool (b1 && b2))
-  | Or, Base (Bool b1), Base (Bool b2) -> Base (Bool (b1 || b2))
   (* function application *)
   | App, UnOp (Fun x, e), v -> subst e v x
   | App, UnOp (RecFun (_, x), e), v -> subst e v x
@@ -165,19 +155,11 @@ let rec step_helper (e : ast) : ast =
   | UnOp (Fun _, _)
   | UnOp (RecFun (_, _), _) ->
       failwith "Unreachable"
-  (* logical negation and numerical negation *)
-  | UnOp (op, e) ->
-      if is_value e then Base (step_unOp op e) else UnOp (op, step_helper e)
-  (* list cons *)
-  | BinOp (Cons, e1, e2) ->
-      if is_value e1 && is_value e2 then failwith "Already a value"
-      else if is_value e1 then BinOp (Cons, step_helper e1, e2)
-      else BinOp (Cons, e1, step_helper e2)
-  (* 2-tupling *)
-  | BinOp (Pair, e1, e2) ->
-      if is_value e1 && is_value e2 then failwith "Already a value"
-      else if is_value e1 then BinOp (Pair, e1, step_helper e2)
-      else BinOp (Pair, step_helper e1, e2)
+  | UnOp (op, e) -> step_unary op e
+  | BinOp (And, e1, e2) -> step_and e1 e2
+  | BinOp (Or, e1, e2) -> step_or e1 e2
+  | BinOp (Cons, e1, e2) -> step_list_cons e1 e2
+  | BinOp (Pair, e1, e2) -> step_pair e1 e2
   (* pair matching *)
   | BinOp (MatchP (x, y), e1, e2) ->
       if is_value e1 then
@@ -191,16 +173,22 @@ let rec step_helper (e : ast) : ast =
   | BinOp (LetRec (f, x), e1, e2) ->
       if is_value e1 then subst e2 e1 x
       else BinOp (LetRec (f, x), step_helper e1, e2)
-  (* logical operations *)
-  | BinOp (And, e1, e2) -> step_and e1 e2
-  | BinOp (Or, e1, e2) -> step_or e1 e2
   (* arithmetic operations and comparisons *)
   | BinOp (op, e1, e2) ->
       (* always evaluate left-to-right *)
       if is_value e1 && is_value e2 then step_binOp op e1 e2
       else if is_value e1 then BinOp (op, e1, step_helper e2)
       else BinOp (op, step_helper e1, e2)
-  | _ -> failwith "Not implemented"
+  | TrinOp (Cond, e1, e2, e3) -> step_conditional_branching e1 e2 e3
+  | TrinOp (op, e1, e2, e3) -> step_list_matching op e1 e2 e3
+
+and step_unary (op : unOp) (e : ast) : ast =
+  if is_value e then
+    match (op, e) with
+    | Not, Base (Bool b) -> Base (Bool (not b))
+    | Neg, Base (Int x) -> Base (Int (-x))
+    | _ -> failwith "Unreachable"
+  else UnOp (op, step_helper e)
 
 and step_and (e1 : ast) (e2 : ast) : ast =
   match e1 with
@@ -213,6 +201,32 @@ and step_or (e1 : ast) (e2 : ast) : ast =
   | Base (Bool true) -> Base (Bool true)
   | Base (Bool false) -> BinOp (Or, e1, step_helper e2)
   | _ -> failwith "Unreachable"
+
+and step_list_cons (e1 : ast) (e2 : ast) : ast =
+  if is_value e1 && is_value e2 then failwith "Already a value"
+  else if is_value e2 then BinOp (Cons, step_helper e1, e2)
+  else BinOp (Cons, e1, step_helper e2)
+
+and step_pair (e1 : ast) (e2 : ast) : ast =
+  if is_value e1 && is_value e2 then failwith "Already a value"
+  else if is_value e2 then BinOp (Pair, step_helper e1, e2)
+  else BinOp (Pair, e1, step_helper e2)
+
+and step_list_matching (op : trinOp) (e1 : ast) (e2 : ast) (e3 : ast) : ast =
+  if is_value e1 then
+    match (op, e1) with
+    | _, Base Nil -> e2
+    | MatchL (x, xs), BinOp (Cons, hd, tl) ->
+        let e3' = subst e3 hd x in
+        subst e3' tl xs
+    | _ -> failwith "Unreachable"
+  else TrinOp (op, step_helper e1, e2, e3)
+
+and step_conditional_branching (e1 : ast) (e2 : ast) (e3 : ast) : ast =
+  match e1 with
+  | Base (Bool true) -> e2
+  | Base (Bool false) -> e3
+  | _ -> TrinOp (Cond, step_helper e1, e2, e3)
 
 let rec step (e : ast) : ast option =
   if is_value e then None else Some (step_helper e)
