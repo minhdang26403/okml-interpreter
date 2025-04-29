@@ -128,16 +128,22 @@ let rec step_internal (e : ast) : ast =
         | Neg, Base (Int x) -> Base (Int (-x))
         | _ -> assert false
       else UnOp (op, step_internal e)
-  | BinOp (And, e1, e2) -> (
-      match e1 with
-      | Base (Bool false) -> Base (Bool false)
-      | Base (Bool true) -> BinOp (And, e1, step_internal e2)
-      | _ -> assert false)
-  | BinOp (Or, e1, e2) -> (
-      match e1 with
-      | Base (Bool true) -> Base (Bool true)
-      | Base (Bool false) -> BinOp (Or, e1, step_internal e2)
-      | _ -> assert false)
+  | BinOp (And, e1, e2) ->
+      if is_value e1 then
+        match e1 with
+        | Base (Bool false) -> Base (Bool false)
+        | Base (Bool true) ->
+            if is_value e2 then e2 else BinOp (And, e1, step_internal e2)
+        | _ -> assert false
+      else BinOp (And, step_internal e1, e2)
+  | BinOp (Or, e1, e2) ->
+      if is_value e1 then
+        match e1 with
+        | Base (Bool true) -> Base (Bool true)
+        | Base (Bool false) ->
+            if is_value e2 then e2 else BinOp (Or, e1, step_internal e2)
+        | _ -> assert false
+      else BinOp (Or, step_internal e1, e2)
   | BinOp (Cons, e1, e2) ->
       if is_value e1 && is_value e2 then assert false
       else if is_value e2 then BinOp (Cons, step_internal e1, e2)
