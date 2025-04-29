@@ -96,18 +96,18 @@ let rec lt_ast (e1 : ast) (e2 : ast) : bool =
       raise (Invalid_argument "compare: functional value")
   | _ -> assert false
 
-let step_binOp (op : binOp) (e1 : ast) (e2 : ast) : ast =
-  match (op, e1, e2) with
+let step_binOp (op : binOp) (v1 : ast) (v2 : ast) : ast =
+  match (op, v1, v2) with
   | Add, Base (Int a), Base (Int b) -> Base (Int (a + b))
   | Sub, Base (Int a), Base (Int b) -> Base (Int (a - b))
   | Mul, Base (Int a), Base (Int b) -> Base (Int (a * b))
   | Div, Base (Int a), Base (Int b) -> Base (Int (a / b))
-  | Eq, e1, e2 -> Base (Bool (eq_ast e1 e2))
-  | Neq, e1, e2 -> Base (Bool (not (eq_ast e1 e2)))
-  | Geq, e1, e2 -> Base (Bool (not (lt_ast e1 e2)))
-  | Leq, e1, e2 -> Base (Bool (not (gt_ast e1 e2)))
-  | Gt, e1, e2 -> Base (Bool (gt_ast e1 e2))
-  | Lt, e1, e2 -> Base (Bool (lt_ast e1 e2))
+  | Eq, v1, v2 -> Base (Bool (eq_ast v1 v2))
+  | Neq, v1, v2 -> Base (Bool (not (eq_ast v1 v2)))
+  | Geq, v1, v2 -> Base (Bool (not (lt_ast v1 v2)))
+  | Leq, v1, v2 -> Base (Bool (not (gt_ast v1 v2)))
+  | Gt, v1, v2 -> Base (Bool (gt_ast v1 v2))
+  | Lt, v1, v2 -> Base (Bool (lt_ast v1 v2))
   | App, UnOp (Fun x, e), v | App, UnOp (RecFun (_, x), e), v -> subst e v x
   | _ -> assert false
 
