@@ -187,7 +187,7 @@ let rec step_internal (e : ast) : ast =
         | _ -> assert false
       else TrinOp (Cond, step_internal e1, e2, e3)
 
-let rec step (e : ast) : ast option =
+let step (e : ast) : ast option =
   if is_value e then None else Some (step_internal e)
 
 let rec eval (e : ast) : ast =
