@@ -53,7 +53,7 @@ let counter = ref 0
 
 let fresh () =
   let v = !counter in
-  counter := v + 1;
+  let () = counter := v + 1 in
   Var v
 
 type tyenv = (string * ty) list
