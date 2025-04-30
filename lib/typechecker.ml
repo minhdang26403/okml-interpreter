@@ -150,6 +150,3 @@ let infer (e : ast) : ty option =
   match unify constraints with
   | Some subst -> Some (apply_subst subst t)
   | None -> None
-
-
-
