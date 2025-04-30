@@ -1,7 +1,8 @@
+(* typechecker.ml *)
+(* Author: Dang Truong, Tran Ong *)
+
 open Exp
 open Type
-
-type tyenv = (string * ty) list
 
 let counter = ref 0
 
@@ -98,7 +99,7 @@ let fresh_tyvar () =
   Var id
 
 (*
- * lookup_tyenv : tyenv -> string -> ty option
+ * lookup_tyenv : (string * ty) list -> string -> ty option
  * REQUIRES: [env] is a valid typing environment.
  * ENSURES: [lookup_tyenv env x] returns Some t if variable [x] is bound to
  *          type t in environment [env], or None if [x] is not bound.
@@ -106,7 +107,7 @@ let fresh_tyvar () =
 let lookup_tyenv env x = List.assoc_opt x env
 
 (*
- * infer_expr : tyenv -> ast -> ty * (ty * ty) list
+ * infer_expr : (string * ty) list -> ast -> ty * (ty * ty) list
  * REQUIRES: [env] is a valid typing environment.
  * ENSURES: [infer_expr env e] returns a pair (t, cs) where t is the inferred
  *          type of expression [e] in environment [env] and cs is a list of
