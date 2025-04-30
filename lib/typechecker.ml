@@ -140,10 +140,15 @@ let rec infer_exp (env : tyenv) (e : ast) : (ty * (ty * ty) list) =
        | Cond ->
            (t2, (t1, Bool) :: (t2, t3) :: (c1 @ c2 @ c3)))
 
-let infer (e : ast) : (ty * (int * ty) list) option =
+let rec apply_subst (subst : (int * ty) list) (t : ty) : ty =
+  match subst with
+  | [] -> t
+  | (x, rt) :: rest -> apply_subst rest (substitute x rt t)
+
+let infer (e : ast) : ty option =
   let (t, constraints) = infer_exp [] e in
   match unify constraints with
-  | Some subst -> Some (t, subst)
+  | Some subst -> Some (apply_subst subst t)
   | None -> None
 
 
