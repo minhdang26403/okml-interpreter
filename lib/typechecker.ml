@@ -1,152 +1,252 @@
-open Exp  
-open Type  
-
-(* 
- * val unify : (Type.ty * Type.ty) list -> (int * Type.ty) list option 
- *)
-
- let rec occur x ty = 
-  match ty with 
-  | Var y -> x = y
-  | Fun(t1, t2) -> occur x t1 || occur x t2
-  | Pair(t1, t2) -> occur x t1 || occur x t2
-  | List t -> occur x t 
-  | _ -> false
-
-(* for i.e: x = 1, rt = Int, ty = Var '1 *)
-(* rt: replaced type, usually primitive types already defined in OCaml *)
-let rec substitute x rt ty = 
-  match ty with 
-  | Var y -> If x = y then rt else Var y 
-  | Fun(t1, t2) -> Fun(substitute x rt t1, substitute x rt t2)
-  | Pair(t1,t2) -> Pair(substitute x rt t1, substitute x rt t2)
-  | List t -> List (substitute x rt t)
-  | _ -> ty 
-
-let mapSubstitution x rt lst = 
-  List.map (fun(a,b) -> (substitute x rt a, substitute x rt b)) lst
-
-(* Ref: https://cs3110.github.io/textbook/chapters/interp/inference.html*)
-
-(* For i.e: 
- * Input: lst = [ (Var 1, Int); (Var 2, Var 1); (Fun(Var 2, Bool), Fun(Int, Var 3)) ]
- * Output: Some ([ (1, Int); (2, Int); (3, Bool) ])
- *)
-let rec unify(lst : (ty * ty) list) : (int * ty) list option = 
-  match lst with 
-  | [] -> Some []
-  | (t1,t2) :: xs -> 
-    if t1 = t2 then unify(xs) else 
-      match (t1,t2) with 
-      | (Var x, t) | (t, Var x) -> 
-        if occur x t then None 
-        else 
-          let ys = mapSubstitution x t xs in 
-          (match unify ys with 
-          | None -> None 
-          | Some subst -> Some((x,t) :: subst))
-      | (Fun(a1, b1), Fun(a2,b2)) | (Pair(a1, b1), Pair(a2, b2)) -> unify((a1,a2) :: (b1,b2) :: xs)
-      | (List t1, List t2) -> unify((t1, t2) :: xs)
-      | _ -> None
-
-let counter = ref 0
-
-let fresh () =
-  let v = !counter in
-  let () = counter := v + 1 in
-  Var v
+open Exp
+open Type
 
 type tyenv = (string * ty) list
 
-let rec lookup (env : tyenv) (x : string) : ty option =
-  match env with
-  | [] -> None
-  | (y, t) :: rest -> if x = y then Some t else lookup rest x
+let counter = ref 0
 
-(* Ref: https://cs3110.github.io/textbook/chapters/interp/inference.html *)
-let rec infer_exp (env : tyenv) (e : ast) : (ty * (ty * ty) list) =
+(*
+ * subst_ty : (int * ty) list -> ty -> ty
+ * REQUIRES: [subst] is a valid substitution map.
+ * ENSURES: [subst_ty subst t] applies the substitution [subst] to type [t] and 
+ *          returns a new type with all type variables in [t] replaced according
+ *          to [subst].
+ *)
+let rec subst_ty subst t =
+  match t with
+  | Var id -> (
+      (* Find most recent mapping for id, if any *)
+      match List.assoc_opt id subst with
+      | Some t' -> subst_ty subst t' (* recursively resolve substitution *)
+      | None -> Var id)
+  | List t' -> List (subst_ty subst t')
+  | Pair (t1, t2) -> Pair (subst_ty subst t1, subst_ty subst t2)
+  | Fun (t1, t2) -> Fun (subst_ty subst t1, subst_ty subst t2)
+  | Int | Bool | Unit -> t (* Base types remain unchanged *)
+
+(*
+ * subst_constraints : (int * ty) list -> (ty * ty) list -> (ty * ty) list
+ * REQUIRES: [subst] is a valid substitution map.
+ * ENSURES: [subst_constraints subst cs] applies the substitution [subst] to all
+ *          types in the constraints [cs] and returns a new list of constraints
+ *          with substitution applied to both sides.
+ *)
+let subst_constraints subst cs =
+  List.map (fun (t1, t2) -> (subst_ty subst t1, subst_ty subst t2)) cs
+
+(*
+ * occurs_check : int -> ty -> bool
+ * REQUIRES: [id] is a valid type variable identifier.
+ * ENSURES: [occurs_check id t] returns true if type variable with [id] appears
+ *          within type [t] and false otherwise.
+ *)
+let rec occurs_check id t =
+  match t with
+  | Var v -> v = id
+  | List t1 -> occurs_check id t1
+  | Pair (t1, t2) -> occurs_check id t1 || occurs_check id t2
+  | Fun (t1, t2) -> occurs_check id t1 || occurs_check id t2
+  | Int | Bool | Unit -> false (* Base types never contain variables *)
+
+(*
+ * unify : (ty * ty) list -> (int * ty) list option
+ * REQUIRES: [constraints] is a list of type equality constraints.
+ * ENSURES: [unify constraints] attempts to find a substitution that makes all
+ *          pairs of types in [constraints] equal. Returns Some substitution if
+ *          unification succeeds, or None if unification fails. The substitution
+ *          maps type variables to their unified types.
+ *)
+let rec unify constraints =
+  match constraints with
+  | [] -> Some [] (* No constraints means empty substitution *)
+  | (t1, t2) :: rest -> (
+      if t1 = t2 then
+        (* If types are already equal, just unify the rest *)
+        unify rest
+      else
+        match (t1, t2) with
+        (* If one side is a type variable, try to substitute it *)
+        | Var id, t | t, Var id -> (
+            if occurs_check id t then
+              (* Occurs check prevents infinite types *)
+              None
+            else
+              let binding = [ (id, t) ] in
+              let new_constraints = subst_constraints binding rest in
+              match unify new_constraints with
+              | None -> None
+              | Some subst -> Some ((id, t) :: subst))
+        | Fun (a1, b1), Fun (a2, b2) | Pair (a1, b1), Pair (a2, b2) ->
+            (* Break down complex types into their components *)
+            unify ((a1, a2) :: (b1, b2) :: rest)
+        | List t1, List t2 ->
+            (* Lists must contain same element type *)
+            unify ((t1, t2) :: rest)
+        | _ ->
+            (* Type constructors mismatch - unification fails *)
+            None)
+
+(*
+ * fresh_tyvar : unit -> ty
+ * REQUIRES: None.
+ * ENSURES: [fresh_tyvar ()] generates a fresh type variable with a unique
+ *          identifier and returns it as a ty.
+ *)
+let fresh_tyvar () =
+  let id = !counter in
+  counter := id + 1;
+  Var id
+
+(*
+ * lookup_tyenv : tyenv -> string -> ty option
+ * REQUIRES: [env] is a valid typing environment.
+ * ENSURES: [lookup_tyenv env x] returns Some t if variable [x] is bound to
+ *          type t in environment [env], or None if [x] is not bound.
+ *)
+let lookup_tyenv env x = List.assoc_opt x env
+
+(*
+ * infer_expr : tyenv -> ast -> ty * (ty * ty) list
+ * REQUIRES: [env] is a valid typing environment.
+ * ENSURES: [infer_expr env e] returns a pair (t, cs) where t is the inferred
+ *          type of expression [e] in environment [env] and cs is a list of
+ *          type constraints that must be satisfied for [e] to have type [t].
+ *)
+let rec infer_expr env e =
   match e with
-  | Base b ->
-      (match b with
-       | Int _ -> (Int, [])
-       | Bool _ -> (Bool, [])
-       | Unit -> (Unit, [])
-       | Nil -> 
-           let t = fresh () in
-           (List t, [])
-       | Var x ->
-           (match lookup env x with
-            | Some t -> (t, [])
-            | None -> failwith ("unbound variable: " ^ x)))
+  | Base b -> (
+      match b with
+      (* Base types: constants have fixed types with no constraints *)
+      | Int _ -> (Int, [])
+      | Bool _ -> (Bool, [])
+      | Unit -> (Unit, [])
+      | Nil ->
+          (* Empty list: polymorphic type 'a list with fresh type variable *)
+          let elem_type = fresh_tyvar () in
+          (List elem_type, [])
+      | Var x -> (
+          (* Variable: look up type in environment or fail if unbound *)
+          match lookup_tyenv env x with
+          | Some t -> (t, [])
+          | None -> failwith ("Unbound variable: " ^ x)))
+  | UnOp (op, e1) -> (
+      (* Unary operators: infer type of subexpression and add constraints *)
+      let t1, c1 = infer_expr env e1 in
+      match op with
+      | Not ->
+          (* Not operator: input must be Bool, output is Bool *)
+          (Bool, (t1, Bool) :: c1)
+      | Neg ->
+          (* Negation: input must be Int, output is Int *)
+          (Int, (t1, Int) :: c1)
+      | Fun x ->
+          (* Lambda: fun x -> e1 has type param_type -> body_type, param_type
+             is fresh *)
+          let param_type = fresh_tyvar () in
+          let env' = (x, param_type) :: env in
+          (* Infer type of body in extended environment to account for x *)
+          let body_type, body_constraints = infer_expr env' e1 in
+          (Fun (param_type, body_type), body_constraints)
+      | RecFun (f, x) ->
+          (* Recursive function: f x = e1 has type fun_type = param_type ->
+             return_type *)
+          let param_type = fresh_tyvar () in
+          let return_type = fresh_tyvar () in
+          let fun_type = Fun (param_type, return_type) in
+          let env' = (x, param_type) :: (f, fun_type) :: env in
+          (* Infer type of body in extended environment to handle
+             recursion *)
+          let body_type, body_constraints = infer_expr env' e1 in
+          (fun_type, (return_type, body_type) :: body_constraints))
+  | BinOp (op, e1, e2) -> (
+      (* Binary operators: infer types of both subexpressions *)
+      let t1, c1 = infer_expr env e1 in
+      let t2, c2 = infer_expr env e2 in
+      match op with
+      | Add | Sub | Mul | Div ->
+          (* Arithmetic: both inputs must be Int, output is Int *)
+          (Int, (t1, Int) :: (t2, Int) :: (c1 @ c2))
+      | Eq | Neq | Geq | Leq | Gt | Lt ->
+          (* Comparisons: inputs must unify, output is Bool *)
+          (Bool, (t1, t2) :: (c1 @ c2))
+      | And | Or ->
+          (* Logical: both inputs must be Bool, output is Bool *)
+          (Bool, (t1, Bool) :: (t2, Bool) :: (c1 @ c2))
+      | App ->
+          (* Function application: t1 must be t2 -> result_type, output is
+             result_type *)
+          let result_type = fresh_tyvar () in
+          (result_type, (t1, Fun (t2, result_type)) :: (c1 @ c2))
+      | Cons ->
+          (* Cons: t2 must be t1 list, output is t1 list *)
+          (List t1, (t2, List t1) :: (c1 @ c2))
+      | Pair ->
+          (* Pair: output is t1 * t2 *)
+          (Pair (t1, t2), c1 @ c2)
+      | MatchP (x, y) ->
+          (* Pair matching: t1 must be a pair, bind x to first element type
+             and y to second element type in e2 *)
+          let first_elem_type = fresh_tyvar () in
+          let second_elem_type = fresh_tyvar () in
+          let env' = (x, first_elem_type) :: (y, second_elem_type) :: env in
+          (* Infer type of body in extended environment to use x and y *)
+          let body_type, body_constraints = infer_expr env' e2 in
+          ( body_type,
+            (t1, Pair (first_elem_type, second_elem_type))
+            :: (c1 @ body_constraints) )
+      | Let x ->
+          (* Let binding: bind x to t1 in e2 *)
+          let env' = (x, t1) :: env in
+          (* Infer type of body in extended environment to account for x *)
+          let body_type, body_constraints = infer_expr env' e2 in
+          (body_type, c1 @ body_constraints)
+      | LetRec (f, x) ->
+          (* Recursive let: f x = e1 has type fun_type = param_type ->
+             return_type *)
+          let param_type = fresh_tyvar () in
+          let return_type = fresh_tyvar () in
+          let fun_type = Fun (param_type, return_type) in
+          let env1 = (x, param_type) :: (f, fun_type) :: env in
+          (* Infer type of function body in extended environment *)
+          let body_type, body_constraints = infer_expr env1 e1 in
+          let env2 = (f, fun_type) :: env in
+          (* Infer type of outer body in extended environment to use f *)
+          let outer_type, outer_constraints = infer_expr env2 e2 in
+          ( outer_type,
+            (body_type, return_type) :: (body_constraints @ outer_constraints)
+          ))
+  | TrinOp (op, e1, e2, e3) -> (
+      (* Ternary operators: infer types of all subexpressions *)
+      let t1, c1 = infer_expr env e1 in
+      let t2, c2 = infer_expr env e2 in
+      let t3, c3 = infer_expr env e3 in
+      match op with
+      | MatchL (x, xs) ->
+          (* List matching: t1 must be a list, bind x to element type and xs
+             to list of same element type in e3 *)
+          let elem_type = fresh_tyvar () in
+          let env' = (x, elem_type) :: (xs, List elem_type) :: env in
+          (* Infer type of cons branch in extended environment to use x and
+             xs *)
+          let cons_type, cons_constraints = infer_expr env' e3 in
+          (* Both branches must have the same type, and t1 must be a list *)
+          ( t2,
+            (t1, List elem_type) :: (t2, cons_type)
+            :: (c1 @ c2 @ cons_constraints) )
+      | Cond ->
+          (* Conditional: t1 must be Bool, t2 and t3 must unify *)
+          (t2, (t1, Bool) :: (t2, t3) :: (c1 @ c2 @ c3)))
 
-  | UnOp (u, e1) ->
-      let (t1, c1) = infer_exp env e1 in
-      (match u with
-       | Not -> (Bool, (t1, Bool) :: c1)
-       | Neg -> (Int, (t1, Int) :: c1)
-       | Fun x ->
-           let tx = fresh () in
-           let (t_body, c_body) = infer_exp ((x, tx) :: env) e1 in
-           (Fun (tx, t_body), c1 @ c_body)
-       | RecFun (f, x) ->
-           let tx = fresh () in
-           let ty = fresh () in
-           let tf = Fun (tx, ty) in
-           let env' = (f, tf) :: (x, tx) :: env in
-           let (t_body, c_body) = infer_exp env' e1 in
-           (tf, (ty, t_body) :: (c1 @ c_body)))
-
-  | BinOp (b, e1, e2) ->
-      let (t1, c1) = infer_exp env e1 in
-      let (t2, c2) = infer_exp env e2 in
-      (match b with
-       | Add | Sub | Mul | Div -> (Int, (t1, Int) :: (t2, Int) :: (c1 @ c2))
-       | Eq | Neq | Geq | Leq | Gt | Lt -> (Bool, (t1, Int) :: (t2, Int) :: (c1 @ c2))
-       | And | Or -> (Bool, (t1, Bool) :: (t2, Bool) :: (c1 @ c2))
-       | App ->
-           let t_ret = fresh () in
-           (t_ret, (t1, Fun (t2, t_ret)) :: (c1 @ c2))
-       | Cons ->
-           (List t1, (t2, List t1) :: (c1 @ c2))
-       | Pair ->
-           (Pair (t1, t2), c1 @ c2)
-       | MatchP (x, y) ->
-           let t_left = fresh () in
-           let t_right = fresh () in
-           let env' = (x, t_left) :: (y, t_right) :: env in
-           let (t_body, c_body) = infer_exp env' e2 in
-           (t_body, (t1, Pair (t_left, t_right)) :: (c1 @ c2 @ c_body))
-       | Let x ->
-           let env' = (x, t1) :: env in
-           infer_exp env' e2
-       | LetRec (f, x) ->
-           let tx = fresh () in
-           let ty = fresh () in
-           let tf = Fun (tx, ty) in
-           let env' = (f, tf) :: (x, tx) :: env in
-           let (t_body, c_body) = infer_exp env' e2 in
-           (t_body, (t1, tf) :: (c1 @ c2 @ c_body)))
-
-  | TrinOp (t, e1, e2, e3) ->
-      let (t1, c1) = infer_exp env e1 in
-      let (t2, c2) = infer_exp env e2 in
-      let (t3, c3) = infer_exp env e3 in
-      (match t with
-       | MatchL (x, xs) ->
-           let elem_ty = fresh () in
-           let env' = (x, elem_ty) :: (xs, List elem_ty) :: env in
-           let (t_cons, c_cons) = infer_exp env' e3 in
-           (t2, (t1, List elem_ty) :: (t2, t_cons) :: (c1 @ c2 @ c3 @ c_cons))
-       | Cond ->
-           (t2, (t1, Bool) :: (t2, t3) :: (c1 @ c2 @ c3)))
-
-let rec apply_subst (subst : (int * ty) list) (t : ty) : ty =
-  match subst with
-  | [] -> t
-  | (x, rt) :: rest -> apply_subst rest (substitute x rt t)
-
+(*
+ * infer : ast -> ty option
+ * REQUIRES: [e] is a valid AST expression.
+ * ENSURES: [infer e] performs type inference on [e] and returns Some t if [e]
+ *          is well-typed with inferred type t, or None if [e] has a type error.
+ *)
 let infer (e : ast) : ty option =
-  let (t, constraints) = infer_exp [] e in
+  (* Reset type variable counter for fresh inference *)
+  counter := 0;
+  let typ, constraints = infer_expr [] e in
   match unify constraints with
-  | Some subst -> Some (apply_subst subst t)
-  | None -> None
+  | None -> None (* Type constraints cannot be satisfied *)
+  | Some subst -> Some (subst_ty subst typ)
