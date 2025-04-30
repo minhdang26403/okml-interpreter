@@ -1,1 +1,4 @@
-let string_of_file (_ : string) : string = failwith "Not implemented"
+open Core
+
+let string_of_file (file : string) : string =
+  In_channel.with_open_bin file In_channel.input_all
