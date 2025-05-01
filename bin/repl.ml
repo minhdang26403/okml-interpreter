@@ -28,7 +28,9 @@ let rec repl () =
           repl ()
       | Some ty ->
           print_endline ("Type: " ^ Type.string_of_ty ty);
-          let value = Eval.eval ast in
+          let optimized = Opt.constProp ast in
+          print_endline ("Optimized AST: " ^ Exp.string_of_ast optimized);
+          let value = Eval.eval optimized in
           print_endline ("Value: " ^ Exp.string_of_ast value);
           print_newline ()
     with
