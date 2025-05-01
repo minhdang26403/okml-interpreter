@@ -21,10 +21,13 @@ let () =
       let () = print_string (Type.string_of_ty t) in
       let () = print_newline () in
 
+      (*
       let exp' = Opt.constProp exp in
       let () = print_newline () in
       let () = print_string (Exp.string_of_ast exp') in
       let () = print_newline () in
+      *)
+      let exp' = exp in
 
       let value = Eval.eval exp' in
       let () = print_newline () in
