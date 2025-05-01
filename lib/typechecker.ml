@@ -132,13 +132,15 @@ let rec infer_expr env e =
           | None -> failwith ("Unbound variable: " ^ x)))
   | UnOp (op, e1) -> (
       (* Unary operators: infer type of subexpression and add constraints *)
-      let t1, c1 = infer_expr env e1 in
+      (* let t1, c1 = infer_expr env e1 in *)
       match op with
       | Not ->
           (* Not operator: input must be Bool, output is Bool *)
+          let t1, c1 = infer_expr env e1 in
           (Bool, (t1, Bool) :: c1)
       | Neg ->
           (* Negation: input must be Int, output is Int *)
+          let t1, c1 = infer_expr env e1 in
           (Int, (t1, Int) :: c1)
       | Fun x ->
           (* Lambda: fun x -> e1 has type param_type -> body_type, param_type
@@ -161,32 +163,43 @@ let rec infer_expr env e =
           (fun_type, (return_type, body_type) :: body_constraints))
   | BinOp (op, e1, e2) -> (
       (* Binary operators: infer types of both subexpressions *)
-      let t1, c1 = infer_expr env e1 in
-      let t2, c2 = infer_expr env e2 in
       match op with
       | Add | Sub | Mul | Div ->
           (* Arithmetic: both inputs must be Int, output is Int *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           (Int, (t1, Int) :: (t2, Int) :: (c1 @ c2))
       | Eq | Neq | Geq | Leq | Gt | Lt ->
           (* Comparisons: inputs must unify, output is Bool *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           (Bool, (t1, t2) :: (c1 @ c2))
       | And | Or ->
           (* Logical: both inputs must be Bool, output is Bool *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           (Bool, (t1, Bool) :: (t2, Bool) :: (c1 @ c2))
       | App ->
           (* Function application: t1 must be t2 -> result_type, output is
              result_type *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           let result_type = fresh_tyvar () in
           (result_type, (t1, Fun (t2, result_type)) :: (c1 @ c2))
       | Cons ->
           (* Cons: t2 must be t1 list, output is t1 list *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           (List t1, (t2, List t1) :: (c1 @ c2))
       | Pair ->
           (* Pair: output is t1 * t2 *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           (Pair (t1, t2), c1 @ c2)
       | MatchP (x, y) ->
           (* Pair matching: t1 must be a pair, bind x to first element type
              and y to second element type in e2 *)
+          let t1, c1 = infer_expr env e1 in
           let first_elem_type = fresh_tyvar () in
           let second_elem_type = fresh_tyvar () in
           let env' = (x, first_elem_type) :: (y, second_elem_type) :: env in
@@ -197,6 +210,7 @@ let rec infer_expr env e =
             :: (c1 @ body_constraints) )
       | Let x ->
           (* Let binding: bind x to t1 in e2 *)
+          let t1, c1 = infer_expr env e1 in
           let env' = (x, t1) :: env in
           (* Infer type of body in extended environment to account for x *)
           let body_type, body_constraints = infer_expr env' e2 in
@@ -218,13 +232,12 @@ let rec infer_expr env e =
           ))
   | TrinOp (op, e1, e2, e3) -> (
       (* Ternary operators: infer types of all subexpressions *)
-      let t1, c1 = infer_expr env e1 in
-      let t2, c2 = infer_expr env e2 in
-      let t3, c3 = infer_expr env e3 in
       match op with
       | MatchL (x, xs) ->
           (* List matching: t1 must be a list, bind x to element type and xs
              to list of same element type in e3 *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
           let elem_type = fresh_tyvar () in
           let env' = (x, elem_type) :: (xs, List elem_type) :: env in
           (* Infer type of cons branch in extended environment to use x and
@@ -236,6 +249,9 @@ let rec infer_expr env e =
             :: (c1 @ c2 @ cons_constraints) )
       | Cond ->
           (* Conditional: t1 must be Bool, t2 and t3 must unify *)
+          let t1, c1 = infer_expr env e1 in
+          let t2, c2 = infer_expr env e2 in
+          let t3, c3 = infer_expr env e3 in
           (t2, (t1, Bool) :: (t2, t3) :: (c1 @ c2 @ c3)))
 
 (*
