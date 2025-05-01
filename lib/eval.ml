@@ -108,7 +108,11 @@ let step_binOp (op : binOp) (v1 : ast) (v2 : ast) : ast =
   | Leq, v1, v2 -> Base (Bool (not (gt_ast v1 v2)))
   | Gt, v1, v2 -> Base (Bool (gt_ast v1 v2))
   | Lt, v1, v2 -> Base (Bool (lt_ast v1 v2))
-  | App, UnOp (Fun x, e), v | App, UnOp (RecFun (_, x), e), v -> subst e v x
+  | App, UnOp (Fun x, body), v -> subst body v x
+  | App, UnOp (RecFun (f, x), body), v ->
+      let body1 = subst body v x in
+      let body2 = subst body1 (UnOp (RecFun (f, x), body)) f in
+      body2
   | _ -> assert false
 
 let rec step_internal (e : ast) : ast =
@@ -164,8 +168,10 @@ let rec step_internal (e : ast) : ast =
       if is_value e1 then subst e2 e1 x
       else BinOp (Let x, step_internal e1, e2)
   | BinOp (LetRec (f, x), e1, e2) ->
-      if is_value e1 then subst e2 e1 x
-      else BinOp (LetRec (f, x), step_internal e1, e2)
+      (* e1 is the function body, so it is already a value. Hence, we don't
+         need to step it *)
+      let fun_val = UnOp (RecFun (f, x), e1) in
+      subst e2 fun_val f
   | BinOp (op, e1, e2) ->
       if is_value e1 && is_value e2 then step_binOp op e1 e2
       else if is_value e2 then BinOp (op, step_internal e1, e2)
