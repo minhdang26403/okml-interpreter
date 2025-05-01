@@ -97,9 +97,19 @@ let rec constProp (e : ast) : ast =
       match (op, e1') with
       | Not, Base (Bool b) -> Base (Bool (not b))
       | Neg, Base (Int n) -> Base (Int (-n))
-      | _ ->
-          (* keep original if not a constant *)
-          UnOp (op, e1'))
+      | _ -> UnOp (op, e1'))
+  | BinOp (And, e1, e2) -> (
+      let e1' = constProp e1 in
+      match e1' with
+      | Base (Bool false) -> Base (Bool false)
+      | Base (Bool true) -> constProp e2
+      | _ -> BinOp (And, e1', constProp e2))
+  | BinOp (Or, e1, e2) -> (
+      let e1' = constProp e1 in
+      match e1' with
+      | Base (Bool false) -> constProp e2
+      | Base (Bool true) -> Base (Bool true)
+      | _ -> BinOp (Or, e1', constProp e2))
   | BinOp (op, e1, e2) -> (
       let e1' = constProp e1 in
       let e2' = constProp e2 in
@@ -107,10 +117,10 @@ let rec constProp (e : ast) : ast =
       | Add, Base (Int a), Base (Int b) -> Base (Int (a + b))
       | Sub, Base (Int a), Base (Int b) -> Base (Int (a - b))
       | Mul, Base (Int a), Base (Int b) -> Base (Int (a * b))
-      | Div, Base _, Base (Int 0) -> BinOp (Div, e1', e2')
+      | Div, _, Base (Int 0) -> BinOp (Div, e1', e2')
       | Div, Base (Int a), Base (Int b) -> Base (Int (a / b))
-      | (Eq | Neq | Gt | Lt | Geq | Leq), UnOp (Fun _, _), _
-      | (Eq | Neq | Gt | Lt | Geq | Leq), UnOp (RecFun _, _), _ ->
+      | (Eq | Neq | Geq | Leq | Gt | Lt), UnOp (Fun _, _), _
+      | (Eq | Neq | Geq | Leq | Gt | Lt), UnOp (RecFun _, _), _ ->
           (* avoid comparing functions *)
           BinOp (op, e1', e2')
       | Eq, v1, v2 when is_value v1 && is_value v2 ->
@@ -125,31 +135,24 @@ let rec constProp (e : ast) : ast =
           Base (Bool (gt_ast v1 v2))
       | Lt, v1, v2 when is_value v1 && is_value v2 ->
           Base (Bool (lt_ast v1 v2))
-      | And, Base (Bool false), _ -> Base (Bool false)
-      | And, Base (Bool true), e -> e
-      | Or, Base (Bool true), _ -> Base (Bool true)
-      | Or, Base (Bool false), e -> e
+      | App, UnOp (Fun x, body), arg when is_value arg ->
+          constProp (subst body arg x)
+      | MatchP (x, y), BinOp (Pair, v1, v2), e2 ->
+          let body = subst (subst e2 v1 x) v2 y in
+          constProp body
       | Let x, v, body when is_value v -> constProp (subst body v x)
-      | Pair, a, b when is_value a && is_value b ->
-          (* it's already a value *)
-          BinOp (Pair, a, b)
-      | Cons, a, b when is_value a && is_value b -> BinOp (Cons, a, b)
-      | App, UnOp (Fun x, body), v when is_value v ->
-          constProp (subst body v x)
-      | _, _, _ ->
-          (* fallback: propagate inside *)
-          BinOp (op, e1', e2'))
-  | TrinOp (Cond, e1, e2, e3) -> (
+      | LetRec (f, x), e1, e2 ->
+          let fun_val = UnOp (RecFun (f, x), constProp e1) in
+          constProp (subst e2 fun_val f)
+      | _, _, _ -> BinOp (op, e1', e2'))
+  | TrinOp (op, e1, e2, e3) -> (
       let e1' = constProp e1 in
-      match e1' with
-      | Base (Bool true) -> constProp e2
-      | Base (Bool false) -> constProp e3
-      | _ -> TrinOp (Cond, e1', constProp e2, constProp e3))
-  | TrinOp (MatchL (x, xs), e1, e2, e3) -> (
-      let e1' = constProp e1 in
-      match e1' with
-      | Base Nil -> constProp e2
-      | BinOp (Cons, hd, tl) when is_value hd && is_value tl ->
+      match (op, e1') with
+      | Cond, Base (Bool true) -> constProp e2
+      | Cond, Base (Bool false) -> constProp e3
+      | MatchL (_, _), Base Nil -> constProp e2
+      | MatchL (x, xs), BinOp (Cons, hd, tl) when is_value hd && is_value tl
+        ->
           let body = subst (subst e3 hd x) tl xs in
           constProp body
-      | _ -> TrinOp (MatchL (x, xs), e1', constProp e2, constProp e3))
+      | _, _ -> TrinOp (op, e1', constProp e2, constProp e3))
