@@ -2,17 +2,19 @@ open Exp
 
 let rec is_value (e : ast) : bool =
   match e with
-  | Base (Int _) | Base (Bool _) | Base Unit | Base Nil -> true
+  | Base (Int _ | Bool _ | Unit | Nil) -> true
   | UnOp (Fun _, _) | UnOp (RecFun _, _) -> true
   | BinOp (Cons, e1, e2) | BinOp (Pair, e1, e2) -> is_value e1 && is_value e2
   | _ -> false
 
+(*
+ * eq_ast : ast -> ast -> bool
+ * REQUIRES: e1 and e2 are values
+ * ENSURES: true if [e1 = e2], false otherwise
+ *)
 let rec eq_ast (e1 : ast) (e2 : ast) : bool =
   match (e1, e2) with
-  | Base (Int a1), Base (Int a2) -> a1 = a2
-  | Base (Bool b1), Base (Bool b2) -> b1 = b2
-  | Base Unit, Base Unit -> true
-  | Base Nil, Base Nil -> true
+  | Base v1, Base v2 -> v1 = v2
   | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
       eq_ast h1 h2 && eq_ast t1 t2
   | BinOp (Pair, a1, b1), BinOp (Pair, a2, b2) ->
@@ -21,12 +23,14 @@ let rec eq_ast (e1 : ast) (e2 : ast) : bool =
       raise (Invalid_argument "compare: functional value")
   | _ -> assert false
 
+(*
+ * gt_ast : ast -> ast -> bool
+ * REQUIRES: e1 and e2 are values
+ * ENSURES: true if [e1 > e2], false otherwise
+ *)
 let rec gt_ast (e1 : ast) (e2 : ast) : bool =
   match (e1, e2) with
-  | Base (Int a1), Base (Int a2) -> a1 > a2
-  | Base (Bool b1), Base (Bool b2) -> b1 > b2
-  | Base Unit, Base Unit -> false
-  | Base Nil, Base Nil -> false
+  | Base v1, Base v2 -> v1 > v2
   | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
       if gt_ast h1 h2 then true
       else if eq_ast h1 h2 then gt_ast t1 t2
@@ -39,12 +43,14 @@ let rec gt_ast (e1 : ast) (e2 : ast) : bool =
       raise (Invalid_argument "compare: functional value")
   | _ -> assert false
 
+(*
+ * lt_ast : ast -> ast -> bool
+ * REQUIRES: e1 and e2 are values
+ * ENSURES: true if [e1 < e2], false otherwise
+ *)
 let rec lt_ast (e1 : ast) (e2 : ast) : bool =
   match (e1, e2) with
-  | Base (Int a1), Base (Int a2) -> a1 < a2
-  | Base (Bool b1), Base (Bool b2) -> b1 < b2
-  | Base Unit, Base Unit -> false
-  | Base Nil, Base Nil -> false
+  | Base v1, Base v2 -> v1 < v2
   | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
       if lt_ast h1 h2 then true
       else if eq_ast h1 h2 then lt_ast t1 t2
@@ -72,6 +78,10 @@ let rec subst (e : ast) (v : ast) (x : string) : ast =
   | UnOp (RecFun (f, y), body) ->
       if x = f || x = y then e else UnOp (RecFun (f, y), subst body v x)
   | UnOp (op, e1) -> UnOp (op, subst e1 v x)
+  | BinOp (MatchP (a, b), e1, e2) ->
+      let e1' = subst e1 v x in
+      let e2' = if x = a || x = b then e2 else subst e2 v x in
+      BinOp (MatchP (a, b), e1', e2')
   | BinOp (Let y, e1, e2) ->
       let e1' = subst e1 v x in
       let e2' = if x = y then e2 else subst e2 v x in
@@ -80,10 +90,6 @@ let rec subst (e : ast) (v : ast) (x : string) : ast =
       let e1' = if x = f || x = y then e1 else subst e1 v x in
       let e2' = if x = f then e2 else subst e2 v x in
       BinOp (LetRec (f, y), e1', e2')
-  | BinOp (MatchP (a, b), e1, e2) ->
-      let e1' = subst e1 v x in
-      let e2' = if x = a || x = b then e2 else subst e2 v x in
-      BinOp (MatchP (a, b), e1', e2')
   | BinOp (op, e1, e2) -> BinOp (op, subst e1 v x, subst e2 v x)
   | TrinOp (MatchL (hd, tl), e1, e2, e3) ->
       let e1' = subst e1 v x in

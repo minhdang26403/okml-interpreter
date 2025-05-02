@@ -53,8 +53,9 @@ let rec constProp (e : ast) : ast =
       | App, UnOp (Fun x, body), arg when is_value arg ->
           constProp (subst body arg x)
       | MatchP (x, y), BinOp (Pair, v1, v2), e2 ->
-          let body = subst (subst e2 v1 x) v2 y in
-          constProp body
+          let body1 = subst e2 v1 x in
+          let body2 = subst body1 v2 y in
+          constProp body2
       | Let x, v, body when is_value v -> constProp (subst body v x)
       | LetRec (f, x), e1, e2 ->
           let fun_val = UnOp (RecFun (f, x), constProp e1) in
@@ -68,8 +69,9 @@ let rec constProp (e : ast) : ast =
       | MatchL (_, _), Base Nil -> constProp e2
       | MatchL (x, xs), BinOp (Cons, hd, tl) when is_value hd && is_value tl
         ->
-          let body = subst (subst e3 hd x) tl xs in
-          constProp body
+          let body1 = subst e3 hd x in
+          let body2 = subst body1 tl xs in
+          constProp body2
       | Cond, Base (Bool true) -> constProp e2
       | Cond, Base (Bool false) -> constProp e3
       | _ -> TrinOp (op, e1', constProp e2, constProp e3))

@@ -4,6 +4,11 @@
 open AstUtils
 open Exp
 
+(*
+ * step_binOp : binOp -> ast -> ast -> ast
+ * REQUIRES: two operands [v1] and [v2] are values
+ * ENSURES: [step_binOp op v1 v2] |-*-> v1 op v2
+ *)
 let step_binOp (op : binOp) (v1 : ast) (v2 : ast) : ast =
   match (op, v1, v2) with
   | Add, Base (Int a), Base (Int b) -> Base (Int (a + b))
@@ -19,17 +24,17 @@ let step_binOp (op : binOp) (v1 : ast) (v2 : ast) : ast =
   | App, UnOp (Fun x, body), v -> subst body v x
   | App, UnOp (RecFun (f, x), body), v ->
       let body1 = subst body v x in
-      let body2 = subst body1 (UnOp (RecFun (f, x), body)) f in
+      let rec_fun_val = UnOp (RecFun (f, x), body) in
+      let body2 = subst body1 rec_fun_val f in
       body2
+  (* just an identity operation for cons and pair values *)
+  | Cons, v1, v2 -> BinOp (Cons, v1, v2)
+  | Pair, v1, v2 -> BinOp (Pair, v1, v2)
   | _ -> assert false
 
 let rec step_internal (e : ast) : ast =
   match e with
-  | Base (Var _)
-  | Base (Int _)
-  | Base (Bool _)
-  | Base Unit
-  | Base Nil
+  | Base (Var _ | Int _ | Bool _ | Unit | Nil)
   | UnOp (Fun _, _)
   | UnOp (RecFun (_, _), _) ->
       assert false
@@ -56,14 +61,6 @@ let rec step_internal (e : ast) : ast =
             if is_value e2 then e2 else BinOp (Or, e1, step_internal e2)
         | _ -> assert false
       else BinOp (Or, step_internal e1, e2)
-  | BinOp (Cons, e1, e2) ->
-      if is_value e1 && is_value e2 then assert false
-      else if is_value e2 then BinOp (Cons, step_internal e1, e2)
-      else BinOp (Cons, e1, step_internal e2)
-  | BinOp (Pair, e1, e2) ->
-      if is_value e1 && is_value e2 then assert false
-      else if is_value e2 then BinOp (Pair, step_internal e1, e2)
-      else BinOp (Pair, e1, step_internal e2)
   | BinOp (MatchP (x, y), e1, e2) ->
       if is_value e1 then
         match e1 with
