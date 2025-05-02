@@ -1,93 +1,8 @@
 (* opt.ml *)
 (* Author: Dang Truong *)
 
+open AstUtils
 open Exp
-
-let rec is_value (e : ast) : bool =
-  match e with
-  | Base (Int _) | Base (Bool _) | Base Unit | Base Nil -> true
-  | UnOp (Fun _, _) | UnOp (RecFun _, _) -> true
-  | BinOp (Cons, e1, e2) | BinOp (Pair, e1, e2) -> is_value e1 && is_value e2
-  | _ -> false
-
-let rec eq_ast (e1 : ast) (e2 : ast) : bool =
-  match (e1, e2) with
-  | Base (Int a1), Base (Int a2) -> a1 = a2
-  | Base (Bool b1), Base (Bool b2) -> b1 = b2
-  | Base Unit, Base Unit -> true
-  | Base Nil, Base Nil -> true
-  | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
-      eq_ast h1 h2 && eq_ast t1 t2
-  | BinOp (Pair, a1, b1), BinOp (Pair, a2, b2) ->
-      eq_ast a1 a2 && eq_ast b1 b2
-  | UnOp (Fun _, _), _ | UnOp (RecFun (_, _), _), _ ->
-      raise (Invalid_argument "compare: functional value")
-  | _ -> assert false
-
-let rec gt_ast (e1 : ast) (e2 : ast) : bool =
-  match (e1, e2) with
-  | Base (Int a1), Base (Int a2) -> a1 > a2
-  | Base (Bool b1), Base (Bool b2) -> b1 > b2
-  | Base Unit, Base Unit -> false
-  | Base Nil, Base Nil -> false
-  | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
-      if gt_ast h1 h2 then true
-      else if eq_ast h1 h2 then gt_ast t1 t2
-      else false
-  | BinOp (Pair, a1, b1), BinOp (Pair, a2, b2) ->
-      if gt_ast a1 a2 then true
-      else if eq_ast a1 a2 then gt_ast b1 b2
-      else false
-  | UnOp (Fun _, _), _ | UnOp (RecFun (_, _), _), _ ->
-      raise (Invalid_argument "compare: functional value")
-  | _ -> assert false
-
-let rec lt_ast (e1 : ast) (e2 : ast) : bool =
-  match (e1, e2) with
-  | Base (Int a1), Base (Int a2) -> a1 < a2
-  | Base (Bool b1), Base (Bool b2) -> b1 < b2
-  | Base Unit, Base Unit -> false
-  | Base Nil, Base Nil -> false
-  | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
-      if lt_ast h1 h2 then true
-      else if eq_ast h1 h2 then lt_ast t1 t2
-      else false
-  | BinOp (Pair, a1, b1), BinOp (Pair, a2, b2) ->
-      if lt_ast a1 a2 then true
-      else if eq_ast a1 a2 then lt_ast b1 b2
-      else false
-  | UnOp (Fun _, _), _ | UnOp (RecFun (_, _), _), _ ->
-      raise (Invalid_argument "compare: functional value")
-  | _ -> assert false
-
-let rec subst (e : ast) (v : ast) (x : string) : ast =
-  match e with
-  | Base (Var y) -> if x = y then v else e
-  | Base _ -> e
-  | UnOp (Fun y, body) -> if x = y then e else UnOp (Fun y, subst body v x)
-  | UnOp (RecFun (f, y), body) ->
-      if x = f || x = y then e else UnOp (RecFun (f, y), subst body v x)
-  | UnOp (op, e1) -> UnOp (op, subst e1 v x)
-  | BinOp (Let y, e1, e2) ->
-      let e1' = subst e1 v x in
-      let e2' = if x = y then e2 else subst e2 v x in
-      BinOp (Let y, e1', e2')
-  | BinOp (LetRec (f, y), e1, e2) ->
-      let e1' = if x = f || x = y then e1 else subst e1 v x in
-      let e2' = if x = f then e2 else subst e2 v x in
-      BinOp (LetRec (f, y), e1', e2')
-  | BinOp (MatchP (a, b), e1, e2) ->
-      let e1' = subst e1 v x in
-      let e2' = if x = a || x = b then e2 else subst e2 v x in
-      BinOp (MatchP (a, b), e1', e2')
-  | BinOp (op, e1, e2) -> BinOp (op, subst e1 v x, subst e2 v x)
-  | TrinOp (MatchL (hd, tl), e1, e2, e3) ->
-      let e1' = subst e1 v x in
-      let e2' = subst e2 v x in
-      let e3' = if x = hd || x = tl then e3 else subst e3 v x in
-      TrinOp (MatchL (hd, tl), e1', e2', e3')
-  | TrinOp (Cond, e1, e2, e3) ->
-      TrinOp (Cond, subst e1 v x, subst e2 v x, subst e3 v x)
 
 let rec constProp (e : ast) : ast =
   match e with
@@ -144,15 +59,17 @@ let rec constProp (e : ast) : ast =
       | LetRec (f, x), e1, e2 ->
           let fun_val = UnOp (RecFun (f, x), constProp e1) in
           constProp (subst e2 fun_val f)
-      | _, _, _ -> BinOp (op, e1', e2'))
+      | _ ->
+          (* fallback: propagate inside *)
+          BinOp (op, e1', e2'))
   | TrinOp (op, e1, e2, e3) -> (
       let e1' = constProp e1 in
       match (op, e1') with
-      | Cond, Base (Bool true) -> constProp e2
-      | Cond, Base (Bool false) -> constProp e3
       | MatchL (_, _), Base Nil -> constProp e2
       | MatchL (x, xs), BinOp (Cons, hd, tl) when is_value hd && is_value tl
         ->
           let body = subst (subst e3 hd x) tl xs in
           constProp body
-      | _, _ -> TrinOp (op, e1', constProp e2, constProp e3))
+      | Cond, Base (Bool true) -> constProp e2
+      | Cond, Base (Bool false) -> constProp e3
+      | _ -> TrinOp (op, e1', constProp e2, constProp e3))
