@@ -1,7 +1,7 @@
 (* opt.ml *)
 (* Author: Dang Truong *)
 
-open AstUtils
+open Astutils
 open Exp
 
 let rec constProp (e : ast) : ast =

@@ -1,5 +1,16 @@
 (library
- (name interpreter))
+ (name interpreter)
+ (modules
+   astutils
+   eval
+   exp
+   lexer
+   opt
+   parser
+   reader
+   type
+   typechecker)
+ (libraries base))
 
 (ocamllex lexer)
 

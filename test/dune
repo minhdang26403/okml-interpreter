@@ -1,2 +1,7 @@
 (test
- (name test_interpreter))
+ (name test_reader)
+ (libraries interpreter base))
+
+(test
+ (name test_interpreter)
+ (libraries interpreter base))
