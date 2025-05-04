@@ -110,7 +110,7 @@ let rec step_internal e =
  * ENSURES: Returns [Some e'] if [e] can take a single evaluation step to [e']; 
  *          returns [None] if [e] is already a value and cannot be reduced further.
  *)
-let step (e : ast) : ast option =
+let step e =
   if is_value e then None else Some (step_internal e)
 
 (*
@@ -119,5 +119,5 @@ let step (e : ast) : ast option =
  * ENSURES: Fully evaluates [e] to a value (in normal form), returning the resulting AST.
  *          Raises an exception if evaluation encounters an error (e.g., type mismatch, division by zero).
  *)
-let rec eval (e : ast) : ast =
+let rec eval e =
   match step e with None -> e | Some e' -> eval e'

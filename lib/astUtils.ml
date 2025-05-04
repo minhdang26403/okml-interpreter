@@ -1,6 +1,13 @@
+(* Author: Dang Truong, Tran Ong *)
+
 open Exp
 
-let rec is_value (e : ast) : bool =
+(*
+ * is_value: ast -> bool
+ * REQUIRES: [e] is a valid AST expression.
+ * ENSURES: Returns true if [e] is already a value and false vice versa
+ *)
+let rec is_value e =
   match e with
   | Base (Int _ | Bool _ | Unit | Nil) -> true
   | UnOp (Fun _, _) | UnOp (RecFun _, _) -> true
@@ -12,7 +19,7 @@ let rec is_value (e : ast) : bool =
  * REQUIRES: e1 and e2 are values
  * ENSURES: true if [e1 = e2], false otherwise
  *)
-let rec eq_ast (e1 : ast) (e2 : ast) : bool =
+let rec eq_ast e1 e2 =
   match (e1, e2) with
   | Base v1, Base v2 -> v1 = v2
   | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
@@ -28,7 +35,7 @@ let rec eq_ast (e1 : ast) (e2 : ast) : bool =
  * REQUIRES: e1 and e2 are values
  * ENSURES: true if [e1 > e2], false otherwise
  *)
-let rec gt_ast (e1 : ast) (e2 : ast) : bool =
+let rec gt_ast e1 e2 =
   match (e1, e2) with
   | Base v1, Base v2 -> v1 > v2
   | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
@@ -48,7 +55,7 @@ let rec gt_ast (e1 : ast) (e2 : ast) : bool =
  * REQUIRES: e1 and e2 are values
  * ENSURES: true if [e1 < e2], false otherwise
  *)
-let rec lt_ast (e1 : ast) (e2 : ast) : bool =
+let rec lt_ast e1 e2 =
   match (e1, e2) with
   | Base v1, Base v2 -> v1 < v2
   | BinOp (Cons, h1, t1), BinOp (Cons, h2, t2) ->
@@ -70,7 +77,7 @@ let rec lt_ast (e1 : ast) (e2 : ast) : bool =
  * expression [e] with value [v]. This function avoids variable capture by
  * respecting scoping (e.g., skip substitution when [x] is shadowed)
  *)
-let rec subst (e : ast) (v : ast) (x : string) : ast =
+let rec subst e v x =
   match e with
   | Base (Var y) -> if x = y then v else e
   | Base _ -> e
