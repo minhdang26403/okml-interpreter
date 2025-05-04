@@ -1,5 +1,5 @@
 (* eval.ml *)
-(* Author: Dang Truong *)
+(* Author: Dang Truong, Tran Ong *)
 
 open AstUtils
 open Exp
@@ -9,7 +9,7 @@ open Exp
  * REQUIRES: two operands [v1] and [v2] are values
  * ENSURES: [step_binOp op v1 v2] |-*-> v1 op v2
  *)
-let step_binOp (op : binOp) (v1 : ast) (v2 : ast) : ast =
+let step_binOp op v1 v2 =
   match (op, v1, v2) with
   | Add, Base (Int a), Base (Int b) -> Base (Int (a + b))
   | Sub, Base (Int a), Base (Int b) -> Base (Int (a - b))
@@ -32,7 +32,13 @@ let step_binOp (op : binOp) (v1 : ast) (v2 : ast) : ast =
   | Pair, v1, v2 -> BinOp (Pair, v1, v2)
   | _ -> assert false
 
-let rec step_internal (e : ast) : ast =
+(*
+ * step_internal: ast -> ast
+ * REQUIRES: [e] is a valid, non-value AST expression.
+ * ENSURES: Returns the AST resulting from performing a single evaluation step on [e].
+ *          Behavior is undefined (or may raise an exception) if [e] is already a value.
+ *)
+let rec step_internal e =
   match e with
   | Base (Var _ | Int _ | Bool _ | Unit | Nil)
   | UnOp (Fun _, _)
@@ -98,8 +104,20 @@ let rec step_internal (e : ast) : ast =
         | _ -> assert false
       else TrinOp (Cond, step_internal e1, e2, e3)
 
+(*
+ * step: ast -> ast option
+ * REQUIRES: [e] is a valid AST expression.
+ * ENSURES: Returns [Some e'] if [e] can take a single evaluation step to [e']; 
+ *          returns [None] if [e] is already a value and cannot be reduced further.
+ *)
 let step (e : ast) : ast option =
   if is_value e then None else Some (step_internal e)
 
+(*
+ * eval: ast -> ast
+ * REQUIRES: [e] is a valid AST expression.
+ * ENSURES: Fully evaluates [e] to a value (in normal form), returning the resulting AST.
+ *          Raises an exception if evaluation encounters an error (e.g., type mismatch, division by zero).
+ *)
 let rec eval (e : ast) : ast =
   match step e with None -> e | Some e' -> eval e'
