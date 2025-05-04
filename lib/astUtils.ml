@@ -1,4 +1,5 @@
-(* Author: Dang Truong, Tran Ong *)
+(* astUtils.ml *)
+(* Author: Dang Truong *)
 
 open Exp
 
