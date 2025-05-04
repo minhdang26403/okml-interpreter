@@ -1,5 +1,5 @@
 (* reader.ml *)
-(* Author: Dang Truong, Tran Ong *)
+(* Author: Tran Ong *)
 
 (*
  * string_of_file : string -> string

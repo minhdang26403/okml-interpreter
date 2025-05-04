@@ -1,5 +1,5 @@
 (* typechecker.ml *)
-(* Author: Dang Truong, Tran Ong *)
+(* Author: Tran Ong, revised by Dang Truong *)
 
 open Exp
 open Type
