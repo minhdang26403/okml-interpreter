@@ -260,7 +260,7 @@ let rec infer_expr env e =
  * ENSURES: [infer e] performs type inference on [e] and returns Some t if [e]
  *          is well-typed with inferred type t, or None if [e] has a type error.
  *)
-let infer (e : ast) : ty option =
+let infer e =
   (* Reset type variable counter for fresh inference *)
   counter := 0;
   let typ, constraints = infer_expr [] e in

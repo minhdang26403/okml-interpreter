@@ -1,10 +1,17 @@
 (* opt.ml *)
-(* Author: Dang Truong *)
+(* Author: Dang Truong, Tran Ong *)
 
 open AstUtils
 open Exp
 
-let rec constProp (e : ast) : ast =
+(*
+ * constProp: ast -> ast
+ * REQUIRES: [e] is a valid AST expression.
+ * ENSURES: Returns a new AST where constant expressions within [e] 
+ *          have been evaluated and replaced with their computed values 
+ *          where possible (constant propagation).
+ *)
+let rec constProp e =
   match e with
   | Base _ -> e (* Constants and variables are unchanged *)
   | UnOp (op, e1) -> (
