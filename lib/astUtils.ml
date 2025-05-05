@@ -6,7 +6,7 @@ open Exp
 (*
  * is_value: ast -> bool
  * REQUIRES: [e] is a valid AST expression.
- * ENSURES: Returns true if [e] is already a value and false vice versa
+ * ENSURES: [is_value e] returns true if [e] is already a value and false otherwise.
  *)
 let rec is_value e =
   match e with
@@ -17,8 +17,8 @@ let rec is_value e =
 
 (*
  * eq_ast : ast -> ast -> bool
- * REQUIRES: e1 and e2 are values
- * ENSURES: true if [e1 = e2], false otherwise
+ * REQUIRES: [e1] and [e2] are values.
+ * ENSURES: [eq_ast e1 e2] returns true if [e1] = [e2] and false otherwise.
  *)
 let rec eq_ast e1 e2 =
   match (e1, e2) with
@@ -33,8 +33,8 @@ let rec eq_ast e1 e2 =
 
 (*
  * gt_ast : ast -> ast -> bool
- * REQUIRES: e1 and e2 are values
- * ENSURES: true if [e1 > e2], false otherwise
+ * REQUIRES: [e1] and [e2] are values.
+ * ENSURES: [gt_ast e1 e2] returns true if [e1] > [e2] and false otherwise.
  *)
 let rec gt_ast e1 e2 =
   match (e1, e2) with
@@ -53,8 +53,8 @@ let rec gt_ast e1 e2 =
 
 (*
  * lt_ast : ast -> ast -> bool
- * REQUIRES: e1 and e2 are values
- * ENSURES: true if [e1 < e2], false otherwise
+ * REQUIRES: [e1] and [e2] are values.
+ * ENSURES: [lt_ast e1 e2] returns true if [e1] < [e2] and false otherwise.
  *)
 let rec lt_ast e1 e2 =
   match (e1, e2) with
@@ -73,10 +73,10 @@ let rec lt_ast e1 e2 =
 
 (*
  * subst : ast -> ast -> string -> ast
- * REQUIRES: [v] is a value
+ * REQUIRES: [v] is a value.
  * ENSURES: [subst e v x] replaces all free occurrences of variable [x] in
  * expression [e] with value [v]. This function avoids variable capture by
- * respecting scoping (e.g., skip substitution when [x] is shadowed)
+ * respecting scoping (e.g., skip substitution when [x] is shadowed).
  *)
 let rec subst e v x =
   match e with

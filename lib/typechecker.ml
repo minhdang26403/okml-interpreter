@@ -1,5 +1,5 @@
 (* typechecker.ml *)
-(* Author: Tran Ong, revised by Dang Truong *)
+(* Author: Dang Truong, Tran Ong *)
 
 open Exp
 open Type
@@ -9,9 +9,8 @@ let counter = ref 0
 (*
  * subst_ty : (int * ty) list -> ty -> ty
  * REQUIRES: [subst] is a valid substitution map.
- * ENSURES: [subst_ty subst t] applies the substitution [subst] to type [t] and 
- *          returns a new type with all type variables in [t] replaced according
- *          to [subst].
+ * ENSURES: [subst_ty subst t] applies the substitution [subst] to type [t] and returns
+ *          a new type with all type variables in [t] replaced according to [subst].
  *)
 let rec subst_ty subst t =
   match t with
@@ -54,7 +53,7 @@ let rec occurs_check id t =
  * REQUIRES: [constraints] is a list of type equality constraints.
  * ENSURES: [unify constraints] attempts to find a substitution that makes all
  *          pairs of types in [constraints] equal. Returns Some substitution if
- *          unification succeeds, or None if unification fails. The substitution
+ *          unification succeeds, or [None] if unification fails. The substitution
  *          maps type variables to their unified types.
  *)
 let rec unify constraints =
@@ -91,7 +90,7 @@ let rec unify constraints =
  * fresh_tyvar : unit -> ty
  * REQUIRES: None.
  * ENSURES: [fresh_tyvar ()] generates a fresh type variable with a unique
- *          identifier and returns it as a ty.
+ *          identifier and returns it as a [ty].
  *)
 let fresh_tyvar () =
   let id = !counter in
@@ -101,16 +100,16 @@ let fresh_tyvar () =
 (*
  * lookup_tyenv : (string * ty) list -> string -> ty option
  * REQUIRES: [env] is a valid typing environment.
- * ENSURES: [lookup_tyenv env x] returns Some t if variable [x] is bound to
- *          type t in environment [env], or None if [x] is not bound.
+ * ENSURES: [lookup_tyenv env x] returns [Some t] if variable [x] is bound to
+ *          type [t] in environment [env], or [None] if [x] is not bound.
  *)
 let lookup_tyenv env x = List.assoc_opt x env
 
 (*
  * infer_expr : (string * ty) list -> ast -> ty * (ty * ty) list
  * REQUIRES: [env] is a valid typing environment.
- * ENSURES: [infer_expr env e] returns a pair (t, cs) where t is the inferred
- *          type of expression [e] in environment [env] and cs is a list of
+ * ENSURES: [infer_expr env e] returns a pair (t, cs) where [t] is the inferred
+ *          type of expression [e] in environment [env] and [cs] is a list of
  *          type constraints that must be satisfied for [e] to have type [t].
  *)
 let rec infer_expr env e =
@@ -257,8 +256,8 @@ let rec infer_expr env e =
 (*
  * infer : ast -> ty option
  * REQUIRES: [e] is a valid AST expression.
- * ENSURES: [infer e] performs type inference on [e] and returns Some t if [e]
- *          is well-typed with inferred type t, or None if [e] has a type error.
+ * ENSURES: [infer e] performs type inference on [e] and returns [Some t] if [e]
+ *          is well-typed with inferred type [t], or [None] if [e] has a type error.
  *)
 let infer e =
   (* Reset type variable counter for fresh inference *)

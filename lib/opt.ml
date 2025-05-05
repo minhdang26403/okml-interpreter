@@ -7,8 +7,8 @@ open Exp
 (*
  * constProp: ast -> ast
  * REQUIRES: [e] is a valid AST expression.
- * ENSURES: Returns a new AST where constant expressions within [e] 
- *          have been evaluated and replaced with their computed values 
+ * ENSURES: [constProp e] returns a new AST where constant expressions within
+ *          [e] have been evaluated and replaced with their computed values
  *          where possible (constant propagation).
  *)
 let rec constProp e =

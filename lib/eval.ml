@@ -7,7 +7,7 @@ open Exp
 (*
  * step_binOp : binOp -> ast -> ast -> ast
  * REQUIRES: two operands [v1] and [v2] are values
- * ENSURES: [step_binOp op v1 v2] |-*-> v1 op v2
+ * ENSURES: [step_binOp op v1 v2] |-*-> [v1 op v2]
  *)
 let step_binOp op v1 v2 =
   match (op, v1, v2) with
@@ -35,8 +35,8 @@ let step_binOp op v1 v2 =
 (*
  * step_internal: ast -> ast
  * REQUIRES: [e] is a valid, non-value AST expression.
- * ENSURES: Returns the AST resulting from performing a single evaluation step on [e].
- *          Behavior is undefined (or may raise an exception) if [e] is already a value.
+ * ENSURES: [step_internal e] returns the AST resulting from performing a single
+ *          evaluation step on [e]. Fails if [e] is already a value.
  *)
 let rec step_internal e =
   match e with
@@ -79,8 +79,8 @@ let rec step_internal e =
       if is_value e1 then subst e2 e1 x
       else BinOp (Let x, step_internal e1, e2)
   | BinOp (LetRec (f, x), e1, e2) ->
-      (* e1 is the function body, so it is already a value. Hence, we don't
-         need to step it *)
+      (* e1 is the function body, so it is already a value.
+       * Hence, we don't need to step it *)
       let fun_val = UnOp (RecFun (f, x), e1) in
       subst e2 fun_val f
   | BinOp (op, e1, e2) ->
@@ -107,17 +107,14 @@ let rec step_internal e =
 (*
  * step: ast -> ast option
  * REQUIRES: [e] is a valid AST expression.
- * ENSURES: Returns [Some e'] if [e] can take a single evaluation step to [e']; 
- *          returns [None] if [e] is already a value and cannot be reduced further.
+ * ENSURES: [step e] returns [Some e'] if [e] can take a single evaluation step to [e']
+ *          and [None] if [e] is already a value and cannot be reduced further.
  *)
-let step e =
-  if is_value e then None else Some (step_internal e)
+let step e = if is_value e then None else Some (step_internal e)
 
 (*
  * eval: ast -> ast
  * REQUIRES: [e] is a valid AST expression.
- * ENSURES: Fully evaluates [e] to a value (in normal form), returning the resulting AST.
- *          Raises an exception if evaluation encounters an error (e.g., type mismatch, division by zero).
+ * ENSURES: [eval e] fully evaluates [e] to a value, returning the resulting AST.
  *)
-let rec eval e =
-  match step e with None -> e | Some e' -> eval e'
+let rec eval e = match step e with None -> e | Some e' -> eval e'
