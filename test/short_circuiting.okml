@@ -1,0 +1,2 @@
+let x = false && (1 / 0) = 0 in
+let y = true || (1 / 0) = 0 in y
